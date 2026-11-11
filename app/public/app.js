@@ -8,6 +8,10 @@
   const STORE_KEY = 'bn.layout.v1';
   const MOBILE = window.matchMedia('(max-width: 820px)');
   const ART = 'America/Argentina/Buenos_Aires';
+  // Modo TV: se activa solo en navegadores de tele / la app de Android TV, o con ?tv=1
+  // (?tv=0 lo apaga). Se recuerda en el navegador.
+  const TV_UA = /SmartTV|SMART-TV|Tizen|Web0S|WebOS|NetCast|HbbTV|BRAVIA|\bAFT[A-Z]|Android TV|GoogleTV|CrKey|Roku|VIDAA|TV Safari|AppleTV|Viera|PhilipsTV|Opera TV|BlucaroNewsTV/i;
+  const APP_TV = /BlucaroNewsTV/.test(navigator.userAgent);
 
   const store = {
     get(k, def) {
@@ -20,6 +24,15 @@
       try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* modo privado / bloqueado */ }
     },
   };
+
+  const TV = (() => {
+    const q = new URLSearchParams(location.search).get('tv');
+    if (APP_TV) return true;
+    if (q != null) { store.set('bn.tv', q !== '0'); return q !== '0'; }
+    const saved = store.get('bn.tv', null);
+    return saved == null ? TV_UA.test(navigator.userAgent) : Boolean(saved);
+  })();
+  const singleColumn = () => MOBILE.matches && !TV;
 
   const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k != null));
 
@@ -138,6 +151,33 @@
     );
   }
 
+  // Sonido por panel: todo arranca silenciado (los navegadores solo permiten autoplay así).
+  // OK en la tele, o el botón 🔇/🔊, lo activa o lo silencia. El volumen es el de la tele.
+  function applyMute(p) {
+    const muted = p.muted !== false;
+    p.muteBtn.setAttribute('aria-pressed', String(!muted));
+    p.muteBtn.setAttribute('aria-label', `${muted ? 'Activar' : 'Silenciar'} sonido del panel ${p.index + 1}`);
+    p.muteBtn.title = muted ? 'Activar sonido' : 'Silenciar';
+    p.muteBtn.firstChild.textContent = muted ? '🔇' : '🔊';
+    p.root.classList.toggle('unmuted', !muted);
+    try {
+      if (p.player && p.player.unMute) {
+        if (muted) p.player.mute();
+        else { p.player.unMute(); p.player.setVolume(100); p.player.playVideo(); }
+      }
+      const a = $('audio', p.body);
+      if (a) { a.muted = muted; if (!muted && a.paused) a.play().catch(() => {}); }
+    } catch { /* el player todavía no está listo: se aplica en onReady */ }
+  }
+
+  function toggleMute(p) {
+    p.muted = p.muted === false;
+    applyMute(p);
+    const ch = byId.get(state.c[p.index]);
+    if (ch && (ch.type === 'twitch' || ch.type === 'iframe')) toast('Este reproductor maneja el sonido por su cuenta');
+    else toast(p.muted ? `🔇 Panel ${p.index + 1} silenciado` : `🔊 Sonido: ${ch ? ch.name : `panel ${p.index + 1}`}`);
+  }
+
   function teardown(p) {
     clearTimeout(p.timer);
     if (p.player && p.player.destroy) { try { p.player.destroy(); } catch { /* ignorar */ } }
@@ -151,6 +191,7 @@
       title,
       allow: allow || 'autoplay; encrypted-media; picture-in-picture; fullscreen',
       allowfullscreen: true,
+      tabindex: '-1', // el foco queda en nuestro panel (control remoto)
       referrerpolicy: 'strict-origin-when-cross-origin',
       loading: 'lazy',
     });
@@ -189,7 +230,11 @@
       if (!f.isConnected) return;
       p.player = new YT.Player(f, {
         events: {
-          onReady: () => { clearTimeout(p.timer); setStatus(p, 'idle', 'Listo'); },
+          onReady: () => {
+            clearTimeout(p.timer);
+            setStatus(p, 'idle', 'Listo');
+            if (p.muted === false) applyMute(p);
+          },
           onStateChange: (e) => {
             clearTimeout(p.timer);
             if (e.data === YT.PlayerState.PLAYING) setStatus(p, 'live', 'EN VIVO');
@@ -221,13 +266,14 @@
   }
 
   function mountAudio(p, ch) {
-    const a = el('audio', { controls: true, preload: 'none', src: ch.source });
+    const a = el('audio', { controls: true, preload: 'none', src: ch.source, tabindex: '-1' });
+    a.muted = p.muted !== false;
     a.addEventListener('playing', () => setStatus(p, 'live', 'Sonando'));
     a.addEventListener('pause', () => setStatus(p, 'idle', 'En pausa'));
     a.addEventListener('waiting', () => setStatus(p, 'loading', 'Cargando…'));
     a.addEventListener('error', () => showFallback(p, 'Señal no disponible', 'La radio no responde en este momento.'));
     p.body.replaceChildren(
-      el('div', { class: 'audio-card' }, el('div', { class: 'big', 'aria-hidden': 'true', text: '📻' }), el('strong', { text: ch.name }), el('span', { class: 'muted', text: 'Tocá ▶ para escuchar' })),
+      el('div', { class: 'audio-card' }, el('div', { class: 'big', 'aria-hidden': 'true', text: '📻' }), el('strong', { text: ch.name }), el('span', { class: 'muted', text: TV ? 'Apretá OK para escuchar' : 'Tocá ▶ o 🔇 para escuchar' })),
       a,
     );
     setStatus(p, 'idle', 'Listo');
@@ -277,21 +323,31 @@
     const grid = $('#grid');
     for (const p of panels) teardown(p);
     panels.length = 0;
-    const count = MOBILE.matches ? 1 : state.g * state.g;
-    grid.style.setProperty('--g', String(MOBILE.matches ? 1 : state.g));
+    const count = singleColumn() ? 1 : state.g * state.g;
+    grid.style.setProperty('--g', String(singleColumn() ? 1 : state.g));
     grid.replaceChildren();
     for (let i = 0; i < count; i++) {
       const select = channelSelect(i);
       const status = el('span', { class: 'status', 'data-state': 'empty' });
       const reload = el('button', { type: 'button', class: 'icon-btn', 'aria-label': `Recargar panel ${i + 1}`, title: 'Recargar' }, el('span', { 'aria-hidden': 'true', text: '↻' }));
-      const body = el('div', { class: 'panel-body' });
-      const root = el('section', { class: 'panel', 'aria-label': `Panel ${i + 1}` }, el('div', { class: 'panel-bar' }, select, status, reload), body);
-      const p = { index: i, root, body, status, select, timer: null, player: null };
+      const muteBtn = el('button', { type: 'button', class: 'icon-btn mute-btn', 'aria-pressed': 'false' }, el('span', { 'aria-hidden': 'true', text: '🔇' }));
+      // En la tele el panel entero es "apretable": OK = activar/silenciar sonido.
+      const body = el('div', { class: 'panel-body', tabindex: TV ? '0' : null, 'aria-label': TV ? `Panel ${i + 1}: OK para activar o silenciar el sonido` : null });
+      const hint = TV ? el('div', { class: 'tv-hint', 'aria-hidden': 'true' }) : null;
+      const root = el('section', { class: 'panel', 'aria-label': `Panel ${i + 1}` }, el('div', { class: 'panel-bar' }, select, status, muteBtn, reload), body, hint);
+      const p = { index: i, root, body, status, select, muteBtn, hint, timer: null, player: null, muted: true };
+      muteBtn.addEventListener('click', () => toggleMute(p));
+      body.addEventListener('keydown', (e) => {
+        if (e.target !== body || !(e.key === 'Enter' || e.key === ' ' || e.keyCode === 23)) return;
+        e.preventDefault();
+        toggleMute(p);
+      });
       select.addEventListener('change', () => { state.c[i] = select.value; persist(); mount(p); });
       reload.addEventListener('click', () => mount(p, { force: true }));
       panels.push(p);
       grid.append(root);
       mount(p);
+      applyMute(p);
     }
     document.querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.g) === state.g)));
   }
@@ -378,14 +434,31 @@
   }
 
   let lastItems = [];
+  // Titulares incrementales: la primera vez se piden todos y después solo los nuevos
+  // (?after=maxId). En el celular baja el consumo de datos de ~3 MB/h a casi nada.
+  const NEWS_MAX = 300;
+  const NEWS_TTL = 48 * 3600 * 1000;
+  let newsMaxId = 0;
+  let newsFullAt = 0;
   async function refreshNews() {
     const status = $('#news-status');
     try {
-      const data = await api('/api/news?limit=300');
-      lastItems = data.items;
+      // Cada 30 min, o si algo no cierra, se vuelve a pedir la lista entera.
+      const full = !newsMaxId || Date.now() - newsFullAt > 30 * 60_000;
+      const data = await api(full ? `/api/news?limit=${NEWS_MAX}` : `/api/news?after=${newsMaxId}&limit=${NEWS_MAX}`);
+      if (!full && (!data.incremental || data.maxId < newsMaxId)) { newsMaxId = 0; return refreshNews(); }
+      if (full) newsFullAt = Date.now();
+      const byIdNews = new Map((full ? [] : lastItems).map((it) => [it.id, it]));
+      for (const it of data.items) byIdNews.set(it.id, it);
+      const cutoff = Date.now() - NEWS_TTL;
+      lastItems = [...byIdNews.values()].filter((it) => it.ts >= cutoff).sort((a, b) => b.ts - a.ts).slice(0, NEWS_MAX);
+      newsMaxId = data.maxId || newsMaxId;
+      const changed = full || data.items.length > 0;
       renderNewsFilter(data.sources);
-      renderNewsList(data.items);
-      updateTicker(data.items);
+      if (changed) {
+        renderNewsList(lastItems);
+        updateTicker(lastItems);
+      }
       const w = data.worker;
       const ageMin = w ? (Date.now() - w.lastRss) / 60000 : Infinity;
       if (ageMin > 6) {
@@ -393,9 +466,9 @@
         status.textContent = w ? `⚠ Titulares sin actualizar desde las ${fmtTime(w.lastRss)}` : '⚠ El lector de titulares todavía no corrió';
       } else {
         status.className = 'news-status muted';
-        status.textContent = `✓ Actualizado ${fmtTime(w.lastRss)} · ${data.items.length} titulares de las últimas 48 h`;
+        status.textContent = `✓ Actualizado ${fmtTime(w.lastRss)} · ${lastItems.length} titulares de las últimas 48 h`;
       }
-      for (const it of data.items) news.seen.add(it.id);
+      for (const it of lastItems) news.seen.add(it.id);
       news.first = false;
     } catch {
       status.className = 'news-status warn';
@@ -508,7 +581,7 @@
     $('#share').addEventListener('click', async () => {
       const url = shareUrl();
       try {
-        if (navigator.share && MOBILE.matches) { await navigator.share({ title: document.title, url }); return; }
+        if (navigator.share && singleColumn()) { await navigator.share({ title: document.title, url }); return; }
         await navigator.clipboard.writeText(url);
         toast('✓ Enlace copiado: abre esta misma grilla');
       } catch {
@@ -531,8 +604,125 @@
     byId = new Map(catalog.channels.map((c) => [c.id, c]));
   }
 
+  // ======================================================================
+  // Modo TV: navegación con las flechas del control remoto
+  // ======================================================================
+
+  // En la app de Android TV el "Atrás" lo maneja la app (llama a window.bnBack).
+  const BACK_KEYS = new Set(['Escape', 'BrowserBack']);
+  const BACK_CODES = new Set([27, 461, 10009]); // Esc, webOS (461), Tizen (10009)
+
+  function navTargets() {
+    const sel = [
+      '.topbar button:not([hidden])', '.panel-bar select', '.panel-bar button', '.panel-body[tabindex]',
+      '#news-filter', '#news-list', '#ticker-pause',
+    ].join(',');
+    return [...document.querySelectorAll(sel)].filter((n) => {
+      const r = n.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(n).visibility !== 'hidden';
+    });
+  }
+
+  // Navegación espacial simple: el elemento más cercano en la dirección de la flecha.
+  function moveFocus(dir) {
+    const cur = document.activeElement;
+    const all = navTargets();
+    if (!cur || !all.includes(cur)) { (panels[0]?.body || all[0])?.focus(); return; }
+    const a = cur.getBoundingClientRect();
+    const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+    let best = null, bestScore = Infinity;
+    for (const n of all) {
+      if (n === cur) continue;
+      const b = n.getBoundingClientRect();
+      const bx = b.left + b.width / 2, by = b.top + b.height / 2;
+      let main, cross;
+      if (dir === 'ArrowRight') { if (b.left < a.right - 4) continue; main = b.left - a.right; cross = Math.abs(by - ay); }
+      else if (dir === 'ArrowLeft') { if (b.right > a.left + 4) continue; main = a.left - b.right; cross = Math.abs(by - ay); }
+      else if (dir === 'ArrowDown') { if (b.top < a.bottom - 4) continue; main = b.top - a.bottom; cross = Math.abs(bx - ax); }
+      else { if (b.bottom > a.top + 4) continue; main = a.top - b.bottom; cross = Math.abs(bx - ax); }
+      const score = Math.max(0, main) + cross * 2;
+      if (score < bestScore) { bestScore = score; best = n; }
+    }
+    if (best) { best.focus(); best.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }
+  }
+
+  // Volver: si el foco no está en un panel, vuelve al primero. Devuelve true si lo usó
+  // (la app de Android TV lo consulta para decidir si cierra la app).
+  function tvBack() {
+    const cur = document.activeElement;
+    if (cur && cur.classList && cur.classList.contains('panel-body')) return false;
+    (panels[0]?.body)?.focus();
+    return true;
+  }
+  window.bnBack = tvBack;
+
+  function setupTv() {
+    if (!TV) return;
+    document.documentElement.classList.add('tv');
+    document.addEventListener('keydown', (e) => {
+      const t = e.target;
+      if (e.key.startsWith('Arrow')) {
+        // En la lista de titulares, arriba/abajo desplazan la lista.
+        if (t && t.id === 'news-list' && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+          const max = t.scrollHeight - t.clientHeight;
+          if ((e.key === 'ArrowUp' && t.scrollTop > 0) || (e.key === 'ArrowDown' && t.scrollTop < max - 1)) {
+            e.preventDefault();
+            t.scrollBy({ top: e.key === 'ArrowDown' ? 160 : -160 });
+            return;
+          }
+        }
+        e.preventDefault(); // evita que la flecha cambie el canal del selector sin abrirlo
+        moveFocus(e.key);
+      } else if (!APP_TV && (BACK_KEYS.has(e.key) || BACK_CODES.has(e.keyCode))) {
+        if (t && t.tagName === 'INPUT') return;
+        if (tvBack()) e.preventDefault();
+      }
+    }, true);
+    // Si el foco se pierde (por ejemplo al tocar un reproductor), vuelve a un panel.
+    window.addEventListener('blur', () => setTimeout(() => {
+      if (document.activeElement && document.activeElement.tagName === 'IFRAME') panels[0]?.body.focus();
+    }, 0));
+    const tvLink = $('#tv-link');
+    if (tvLink) tvLink.hidden = true;
+  }
+
+  // Pantalla siempre encendida en la tele o con la app instalada (si el navegador deja).
+  async function keepAwake() {
+    const standalone = window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+    if (!(TV || standalone) || !('wakeLock' in navigator)) return;
+    const req = async () => { try { if (document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch { /* sin permiso */ } };
+    await req();
+    document.addEventListener('visibilitychange', req);
+  }
+
+  // PWA: instalable desde el navegador (celular / compu). Sin tiendas.
+  function setupPwa() {
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    const btn = $('#install');
+    if (!btn || TV) return;
+    let deferred = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferred = e;
+      btn.hidden = false;
+    });
+    btn.addEventListener('click', async () => {
+      if (!deferred) return;
+      deferred.prompt();
+      try { await deferred.userChoice; } catch { /* ignorar */ }
+      deferred = null;
+      btn.hidden = true;
+    });
+    window.addEventListener('appinstalled', () => { btn.hidden = true; toast('✓ App instalada'); });
+  }
+
   async function init() {
     readState();
+    setupTv();
+    setupPwa();
+    keepAwake();
     tickClock();
     setInterval(tickClock, 15000);
     setupTheme();
@@ -549,6 +739,7 @@
     defaults();
     persist();
     renderGrid();
+    if (TV) panels[0]?.body.focus();
     refreshNews();
     refreshData();
     setInterval(refreshNews, 60_000);

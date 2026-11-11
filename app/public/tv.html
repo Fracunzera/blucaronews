@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es-AR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>App para TV · {{SITE}}</title>
+  <meta name="description" content="Cómo ver {{SITE}} en la tele: app para Android TV, Google TV y Fire TV, o desde el navegador de cualquier Smart TV.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/page.css">
+  <script src="/theme.js"></script>
+</head>
+<body class="page">
+  <main class="doc">
+    <p><a href="/">← Volver al monitor</a></p>
+    <h1>📺 {{SITE}} en la tele</h1>
+    <p>Hay dos formas de verlo. Las dos son gratis y ninguna pasa por una tienda de apps.</p>
+
+    <div class="card download">
+      <h2>App para Android TV, Google TV y Fire TV</h2>
+      <p><a class="btn primary big" href="/tv.apk" download>⬇ Descargar la app (APK)</a></p>
+      <p class="hint">{{APK_INFO}}</p>
+      <p class="hint">Desde la tele, la dirección corta es <strong class="code">{{DOMAIN}}/tv.apk</strong></p>
+    </div>
+
+    <h2>Instalarla en Android TV o Google TV (Chromecast, TCL, Philips, Sony, etc.)</h2>
+    <ol>
+      <li>En la tele, abrí <strong>Google Play</strong>, buscá <strong>Downloader</strong> (el de AFTVnews, ícono naranja) e instalalo.</li>
+      <li>Dale permiso a Downloader para instalar apps:
+        <ul>
+          <li><strong>Google TV:</strong> primero activá el modo desarrollador. Andá a <em>Configuración → Sistema → Acerca de</em> y apretá OK <strong>7 veces</strong> sobre <em>Compilación del SO de Android TV</em>, hasta que diga "Ahora sos desarrollador". Después andá a <em>Configuración → Apps → Seguridad y restricciones → Fuentes desconocidas</em> y activá <strong>Downloader</strong>.</li>
+          <li><strong>Android TV (versiones anteriores):</strong> <em>Configuración → Preferencias del dispositivo → Seguridad y restricciones → Fuentes desconocidas</em> y activá <strong>Downloader</strong>.</li>
+        </ul>
+      </li>
+      <li>Abrí Downloader, escribí <strong class="code">{{DOMAIN}}/tv.apk</strong> en la barra de dirección y apretá <strong>Ir</strong>.</li>
+      <li>Cuando termine la descarga, elegí <strong>Instalar</strong>. Al final, Downloader te ofrece borrar el archivo descargado: podés decirle que sí.</li>
+      <li>Listo: <strong>Blucaro News</strong> aparece en la fila de apps del inicio (si no la ves, buscala en <em>Apps → Ver todas</em>).</li>
+    </ol>
+
+    <h2>Instalarla en Fire TV (Amazon)</h2>
+    <ol>
+      <li>Buscá <strong>Downloader</strong> en la tienda de Amazon de la tele e instalalo.</li>
+      <li>Andá a <em>Configuración → Mi Fire TV → Opciones para desarrolladores → Instalar apps desconocidas</em> y activá <strong>Downloader</strong>. Si no aparece <em>Opciones para desarrolladores</em>, entrá a <em>Mi Fire TV → Acerca de</em> y apretá OK <strong>7 veces</strong> sobre el nombre del dispositivo.</li>
+      <li>Seguí desde el paso 3 de Android TV.</li>
+    </ol>
+
+    <h2>Con un pendrive (sin Downloader)</h2>
+    <ol>
+      <li>Descargá el APK en la compu con el botón de arriba y copialo a un pendrive.</li>
+      <li>Conectá el pendrive a la tele y abrilo con un explorador de archivos (por ejemplo <strong>File Commander</strong> o <strong>X-plore</strong>, gratis en Google Play).</li>
+      <li>Elegí <em>blucaronews-tv.apk</em> → <strong>Instalar</strong>. La primera vez te va a pedir permiso para instalar apps desde ese explorador: activalo y volvé.</li>
+    </ol>
+
+    <h2>Samsung, LG y otras Smart TV: desde el navegador</h2>
+    <p>Abrí el navegador de la tele (<em>Internet</em> en Samsung, <em>Navegador web</em> en LG) y entrá a <strong class="code">{{DOMAIN}}</strong>. La página detecta que es una tele y se pone en modo TV. Si no lo detecta, entrá a <strong class="code">{{DOMAIN}}/?tv=1</strong>. Para volver al modo normal: <strong class="code">{{DOMAIN}}/?tv=0</strong>.</p>
+    <p class="hint">Guardala en favoritos para no tener que escribirla cada vez.</p>
+
+    <h2>Cómo se usa con el control remoto</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Botón</th><th>Qué hace</th></tr></thead>
+        <tbody>
+          <tr><td>◀ ▲ ▶ ▼ (flechas)</td><td>Moverse entre los paneles, los selectores de canal y los botones de arriba.</td></tr>
+          <tr><td><strong>OK</strong> sobre un panel</td><td><strong>Activar o silenciar el sonido</strong> de ese canal. Todos arrancan silenciados; podés tener más de uno con sonido.</td></tr>
+          <tr><td><strong>OK</strong> sobre el nombre del canal</td><td>Abre la lista para <strong>cambiar de canal</strong> en ese panel.</td></tr>
+          <tr><td>Volumen de la tele</td><td>Sube y baja el volumen como siempre.</td></tr>
+          <tr><td>1 · 4 · 9 (arriba)</td><td>Cuántos canales ver a la vez.</td></tr>
+          <tr><td>Titulares (arriba)</td><td>Muestra u oculta la columna de titulares. Parado en la columna, ▲ ▼ la recorren.</td></tr>
+          <tr><td>Atrás</td><td>Vuelve a los paneles; si ya estás en un panel, cierra la app.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Preguntas frecuentes</h2>
+    <ul>
+      <li><strong>¿Es seguro?</strong> La app es solo una ventana a {{DOMAIN}}: no pide permisos más allá de Internet, no lee nada de la tele y no tiene publicidad. Los videos llegan directo de YouTube con el reproductor oficial de cada medio.</li>
+      <li><strong>Un panel dice "Sin vivo ahora".</strong> Ese canal no está transmitiendo en este momento. Cambialo por otro o probá más tarde.</li>
+      <li><strong>¿Cómo la actualizo?</strong> Casi todo se actualiza solo (la app carga la página). Si alguna vez hay un APK nuevo, repetí la instalación por encima: no hace falta desinstalar.</li>
+      <li><strong>¿Cómo la desinstalo?</strong> <em>Configuración → Apps → Blucaro News → Desinstalar</em>.</li>
+    </ul>
+
+    <p class="hint">{{SITE}} no retransmite señales: cada canal se ve con el reproductor oficial del medio. Ver <a href="/terminos">términos</a>.</p>
+  </main>
+</body>
+</html>

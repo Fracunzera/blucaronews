@@ -158,6 +158,21 @@ Sin configurar nada, cada panel carga el vivo actual del canal y muestra el esta
 
 Si cargás `YT_API_KEY` (YouTube Data API v3, gratis), el worker averigua el **ID del vivo** de cada canal y el panel inserta ese video. Esto hace falta porque el formato genérico `embed/live_stream?channel=…` da error 150 en algunos canales que sí permiten insertar el vivo (pasaba con Canal 26 y Crónica). También muestra "○ Sin transmisión en vivo" en los canales sin vivo y "El medio no permite incrustar este vivo" cuando el dueño lo bloqueó (Telefe Noticias). Los vivos nuevos salen del feed del canal (gratis); los 24 h, que quedan fuera del feed, se buscan con `search.list` (100 unidades) como mucho cada 90 minutos por canal y solo mientras no haya un vivo conocido, con un tope de 7.000 unidades por día de las 10.000 gratuitas. No se descarga ningún video. Si la key tiene restricción por IP, tiene que ser la IPv4 del VPS: los contenedores salen por IPv4.
 
+## App para TV, celular e instalación
+
+- **Modo TV.** Se activa solo en navegadores de tele y en la app de Android TV, o a mano con `/?tv=1` (`/?tv=0` lo apaga). Con las flechas del control te movés entre paneles y botones. **OK sobre un panel activa o silencia su sonido**: todos arrancan silenciados y podés tener varios con sonido. El canal se cambia con el selector de cada panel, que en Android TV abre la lista nativa. El volumen se maneja con el de la tele.
+- **App de Android TV, Google TV y Fire TV.** Es un WebView mínimo (`android/`, unos 28 KB) que abre la página en modo TV y aparece en el inicio con banner. No necesita cuenta en ninguna tienda: se instala con Downloader o desde un pendrive. Las instrucciones para el usuario están en **`/tv`**, y la descarga en **`/tv.apk`**.
+- **PWA.** En el celular o la compu se puede "instalar" desde el navegador (botón *Instalar app* o *Agregar a pantalla de inicio*). El service worker solo cachea la página. Nunca cachea `/api/*` ni los reproductores.
+- **Titulares incrementales.** Después de la primera carga, el navegador pide `/api/news?after=<maxId>` y recibe solo los titulares nuevos, cerca de 1 KB por minuto.
+
+Para compilar y publicar el APK (la primera vez arma una imagen de Docker de unos 700 MB con el SDK de Android):
+
+```bash
+sudo ./android/build.sh
+```
+
+El APK queda en el volumen de datos (`/data/apk`), no en git. La **clave de firma** se crea la primera vez en `/root/.blucaronews-apk/`. Hacele backup: si se pierde, las teles que ya tienen la app no pueden actualizarla y hay que desinstalarla y volver a instalarla. Los íconos y el banner se regeneran con `python3 scripts/make-icons.py`.
+
 ## Backup y restore
 
 Para hacer un backup:

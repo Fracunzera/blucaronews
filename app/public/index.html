@@ -8,6 +8,11 @@
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0d1117">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Blucaro News">
   <link rel="stylesheet" href="/styles.css">
   <script src="/theme.js"></script>
   <script src="/app.js" defer></script>
@@ -30,6 +35,9 @@
     </div>
 
     <div class="actions">
+      <button type="button" id="install" class="btn" hidden>
+        <span aria-hidden="true">⬇</span> Instalar app
+      </button>
       <button type="button" id="share" class="btn">
         <span aria-hidden="true">🔗</span> Compartir
       </button>
@@ -71,7 +79,7 @@
         </div>
         <p id="news-status" class="news-status muted" role="status">Cargando titulares…</p>
       </div>
-      <ol id="news-list" class="news-list" aria-live="off"></ol>
+      <ol id="news-list" class="news-list" aria-live="off" tabindex="-1"></ol>
     </aside>
   </main>
 
@@ -86,6 +94,7 @@
     </div>
     <nav class="footer-links" aria-label="Información">
       <a href="/terminos">Términos y bajas</a>
+      <a href="/tv" id="tv-link">📺 App para TV</a>
       <span class="muted">Contenido de sus autores · No retransmitimos señales</span>
     </nav>
   </footer>
