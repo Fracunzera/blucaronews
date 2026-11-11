@@ -34,3 +34,12 @@ td.actions .btn { min-height: 28px; padding: 2px 8px; }
 .st-ok { color: var(--ok); }
 .st-err { color: var(--warn); }
 .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+
+/* Página /tv */
+.doc .download { margin: 18px 0 8px; }
+.doc .download h2 { margin-top: 0; }
+.btn.big { display: inline-block; font-size: 17px; padding: 10px 18px; text-decoration: none; }
+.btn.big:hover { text-decoration: none; }
+.code { font-family: var(--mono); background: var(--bg-3); border-radius: 4px; padding: 1px 6px; }
+.doc ol > li { margin: 8px 0; }
+.doc table { font-size: 14px; }

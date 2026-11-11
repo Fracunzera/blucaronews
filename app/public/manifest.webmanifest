@@ -1,0 +1,20 @@
+{
+  "name": "Blucaro News — monitor de medios",
+  "short_name": "Blucaro News",
+  "description": "Señales en vivo con los reproductores oficiales de cada medio, titulares, dólar y clima.",
+  "lang": "es-AR",
+  "id": "/",
+  "start_url": "/?app=1",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "categories": ["news"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App de Android TV de Blucaro News: una ventana (WebView) a la página en modo TV.
+     Solo pide Internet. Aparece en el inicio de Android TV / Google TV (LEANBACK_LAUNCHER)
+     y también se puede instalar en un celular o tablet Android. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="site.blucaro.news">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/banner"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:hardwareAccelerated="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

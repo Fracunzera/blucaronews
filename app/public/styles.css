@@ -257,3 +257,59 @@ body.news-hidden .news { display: none; }
   .footer { position: sticky; bottom: 0; }
   .footer-links { padding-bottom: calc(3px + env(safe-area-inset-bottom)); }
 }
+
+/* ---------- sonido por panel ---------- */
+
+.mute-btn[aria-pressed="true"] { border-color: var(--live); color: var(--live); }
+.panel.unmuted { border-color: var(--live); }
+
+/* ---------- modo TV (navegador de la tele o app de Android TV) ---------- */
+/* Pensado para verse a 3 m: letra más grande, foco muy visible, nada que requiera mouse. */
+
+.tv-hint { display: none; }
+html.tv body { font-size: 18px; }
+html.tv .topbar { padding: 10px 2.5vw; gap: 16px; }
+html.tv .brand-name { font-size: 24px; }
+html.tv .brand-sub, html.tv #share { display: none; }
+html.tv .seg, html.tv .btn, html.tv .icon-btn { min-height: 44px; padding: 6px 14px; font-size: 18px; }
+html.tv .seg { min-width: 52px; }
+html.tv .clock { font-size: 18px; }
+html.tv .databar { font-size: 17px; padding: 6px 2.5vw; }
+html.tv .data-title { font-size: 14px; }
+html.tv .layout { grid-template-columns: minmax(0, 1fr) 420px; padding: 0 1.5vw; }
+html.tv body.news-hidden .layout { grid-template-columns: minmax(0, 1fr); }
+html.tv .grid { --gap: 10px; }
+html.tv .panel { position: relative; border-width: 2px; }
+html.tv .panel-bar { font-size: 16px; padding: 4px 8px; }
+html.tv .panel-bar select { min-height: 40px; font-size: 17px; }
+html.tv .icon-btn { min-height: 40px; min-width: 48px; }
+html.tv .news-head h2 { font-size: 18px; }
+html.tv .news-item a { font-size: 18px; }
+html.tv .news-meta { font-size: 14px; }
+html.tv .news-filters select { min-height: 40px; }
+html.tv .ticker { height: 46px; }
+html.tv .ticker-item { font-size: 19px; }
+html.tv .ticker-item b { font-size: 15px; }
+html.tv .ticker-btn { font-size: 16px; padding: 0 16px; }
+html.tv .footer-links { padding: 4px 2.5vw 8px; font-size: 14px; }
+html.tv .fallback .title { font-size: 22px; }
+html.tv .fallback .detail { font-size: 16px; }
+html.tv .toast { font-size: 22px; padding: 12px 22px; bottom: 110px; }
+
+/* Foco del control remoto: borde grueso sobre el panel elegido. */
+html.tv :focus-visible, html.tv :focus { outline: 4px solid var(--focus); outline-offset: 2px; }
+html.tv .panel-body:focus { outline: none; }
+html.tv .panel:has(.panel-body:focus) { border-color: var(--focus); box-shadow: 0 0 0 4px var(--focus); }
+html.tv .panel-body:focus::after {
+  content: ""; position: absolute; inset: 0; border: 4px solid var(--focus); pointer-events: none; z-index: 2;
+}
+html.tv .tv-hint {
+  display: block; position: absolute; left: 12px; bottom: 12px; z-index: 3; pointer-events: none;
+  background: rgba(0, 0, 0, .72); color: #fff; border-radius: 8px; padding: 6px 12px; font-size: 17px; font-weight: 600;
+}
+html.tv .tv-hint::before { content: "🔇 OK = sonido"; }
+html.tv .panel.unmuted .tv-hint::before { content: "🔊 Con sonido · OK = silenciar"; }
+html.tv .panel.unmuted .tv-hint { background: rgba(207, 34, 46, .85); }
+/* La pista se ve solo en el panel con foco y en los que tienen sonido. */
+html.tv .panel:not(.unmuted):not(:has(.panel-body:focus)) .tv-hint { display: none; }
+html.tv #news-list:focus { outline: 4px solid var(--focus); outline-offset: -4px; }

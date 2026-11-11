@@ -97,6 +97,39 @@ const pages = { index: page('index.html'), terminos: page('terminos.html'), admi
 app.get('/', (req, reply) => reply.type('text/html; charset=utf-8').send(pages.index));
 app.get('/terminos', (req, reply) => reply.type('text/html; charset=utf-8').send(pages.terminos));
 app.get('/admin', (req, reply) => reply.header('X-Robots-Tag', 'noindex').type('text/html; charset=utf-8').send(pages.admin));
+// ---------- app de Android TV ----------
+// El APK se arma con android/build.sh y se copia al volumen de datos (no va en la imagen
+// ni en git). /tv explica cómo instalarlo; /tv.apk lo descarga.
+const APK_PATH = path.join(settings.dataDir, 'apk', 'blucaronews-tv.apk');
+const APK_INFO = path.join(settings.dataDir, 'apk', 'version.json');
+
+function apkInfo() {
+  try {
+    const st = fs.statSync(APK_PATH);
+    let v = {};
+    try { v = JSON.parse(fs.readFileSync(APK_INFO, 'utf8')); } catch {}
+    const mb = (st.size / 1024 / 1024).toFixed(st.size < 1024 * 1024 ? 2 : 1);
+    return `Versión ${esc(v.versionName || '1.0')} · ${mb} MB · actualizada el ${new Date(st.mtimeMs).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`;
+  } catch {
+    return 'El APK todavía no está publicado en este servidor.';
+  }
+}
+
+app.get('/tv', (req, reply) => reply.type('text/html; charset=utf-8').send(page('tv.html').replaceAll('{{APK_INFO}}', apkInfo())));
+
+app.get('/tv.apk', (req, reply) => {
+  let st;
+  try { st = fs.statSync(APK_PATH); } catch {
+    return reply.code(404).type('text/plain; charset=utf-8').send('Todavía no hay APK publicado. Ver /tv');
+  }
+  return reply
+    .header('Content-Type', 'application/vnd.android.package-archive')
+    .header('Content-Disposition', 'attachment; filename="blucaronews-tv.apk"')
+    .header('Content-Length', st.size)
+    .header('Cache-Control', 'no-cache')
+    .send(fs.createReadStream(APK_PATH));
+});
+
 app.get('/robots.txt', (req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /admin\nDisallow: /api/\n'));
 
 // ---------- API pública (solo lectura) ----------
@@ -115,17 +148,29 @@ const newsStmt = {
   all: db.prepare('SELECT id, feed_id, source, title, link, summary, published_at FROM news ORDER BY published_at DESC LIMIT ?'),
   byFeed: db.prepare('SELECT id, feed_id, source, title, link, summary, published_at FROM news WHERE feed_id = ? ORDER BY published_at DESC LIMIT ?'),
   counts: db.prepare('SELECT feed_id, source, COUNT(*) AS n, MAX(published_at) AS last FROM news GROUP BY feed_id'),
+  // Incremental: el id es el rowid (crece con cada alta), así el cliente pide solo lo nuevo.
+  after: db.prepare('SELECT id, feed_id, source, title, link, summary, published_at FROM news WHERE id > ? ORDER BY published_at DESC LIMIT ?'),
+  maxId: db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM news'),
 };
 
 app.get('/api/news', (req) => {
   const limit = Math.max(1, Math.min(300, Number(req.query.limit) || 150));
   const feed = typeof req.query.feed === 'string' ? req.query.feed.slice(0, 40) : '';
-  const rows = feed ? newsStmt.byFeed.all(feed, limit) : newsStmt.all.all(limit);
+  // ?after=<maxId de la respuesta anterior>: solo los titulares agregados desde entonces.
+  // Todos los clientes al día piden el mismo "after", así que la caché de nginx los agrupa.
+  const after = Number.parseInt(req.query.after, 10);
+  const maxId = Number(newsStmt.maxId.get().m);
+  const incremental = Number.isSafeInteger(after) && after >= 0 && !feed;
+  const rows = incremental
+    ? newsStmt.after.all(after, limit)
+    : feed ? newsStmt.byFeed.all(feed, limit) : newsStmt.all.all(limit);
   const counts = Object.fromEntries(newsStmt.counts.all().map((r) => [r.feed_id, r]));
   const status = kvGet('feedstatus')?.value || {};
   const worker = kvGet('worker')?.value || null;
   return {
     worker: worker && { lastRss: worker.lastRss, intervalSec: worker.intervalSec },
+    maxId,
+    incremental,
     sources: getFeeds()
       .filter((f) => f.enabled !== false)
       .map((f) => ({ id: f.id, name: f.name, count: counts[f.id]?.n || 0, ok: status[f.id]?.ok ?? null })),
