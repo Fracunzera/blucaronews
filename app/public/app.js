@@ -34,6 +34,12 @@
   })();
   const singleColumn = () => MOBILE.matches && !TV;
 
+  // Cuántos videos de YouTube se mueven a la vez en la tele. Cada tele tiene un límite de
+  // videos que puede decodificar juntos; si se pasa, el sistema pausa reproductores. Se
+  // ajusta solo (y se recuerda en esa tele) o a mano desde el menú. Los demás paneles
+  // muestran una vista previa del canal; OK sobre uno lo pasa a video.
+  const tvPerf = { max: Math.min(4, Math.max(1, Number(store.get('bn.tv.maxVideos', 4)) || 4)), pauses: [] };
+
   const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k != null));
 
   const el = (tag, attrs = {}, ...children) => {
@@ -163,6 +169,7 @@
     p.muteBtn.title = muted ? 'Activar sonido' : 'Silenciar';
     p.muteBtn.firstChild.textContent = muted ? '🔇' : '🔊';
     p.root.classList.toggle('unmuted', !muted);
+    if (TV) applyLite(p);
     try {
       if (p.player && p.player.unMute) {
         if (muted) p.player.mute();
@@ -183,7 +190,9 @@
 
   function teardown(p) {
     clearTimeout(p.timer);
-    clearTimeout(p.resume);
+    clearInterval(p.snapTimer);
+    p.mode = null;
+    p.root.classList.remove('is-snap');
     if (p.player && p.player.destroy) { try { p.player.destroy(); } catch { /* ignorar */ } }
     p.player = null;
     p.body.replaceChildren();
@@ -209,7 +218,9 @@
     if (!TV) return 1;
     const r = p.body.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const target = state.g > 1 ? 640 : 1280; // ancho en px reales que queremos que vea YouTube
+    // Ancho en px reales que queremos que vea YouTube: 1 canal ≈720p; con 4, el que suena
+    // ≈360p y los silenciados ≈240p.
+    const target = state.g === 1 ? 1280 : p.muted === false ? 640 : 430;
     return Math.max(1, Math.min(4, (r.width * dpr) / target));
   }
 
@@ -221,8 +232,78 @@
     f.classList.toggle('lite', k > 1.05);
   }
 
+  const videoPanels = () => panels.filter((q) => q.mode === 'video');
+
+  function wantsSnapshot(p) {
+    if (!TV || state.g === 1) return false;
+    if (p.forceSnap) return true;
+    if (p.forceVideo) return false;
+    return videoPanels().filter((q) => q !== p).length >= tvPerf.max;
+  }
+
+  // Panel "vista previa": la miniatura oficial del vivo (i.ytimg.com; suele ser la imagen
+  // que eligió el canal, no un cuadro actual). Casi no usa la tele. OK lo pasa a video.
+  function mountSnapshot(p, ch, live) {
+    p.mode = 'snap';
+    p.root.classList.add('is-snap');
+    const vid = live && live.videoId;
+    const img = vid ? el('img', { alt: '', src: `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/hqdefault_live.jpg?t=${Date.now()}` }) : null;
+    if (img) {
+      p.snapTimer = setInterval(() => { img.src = `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/hqdefault_live.jpg?t=${Date.now()}`; }, 30_000);
+      img.addEventListener('error', () => img.remove());
+    }
+    p.body.replaceChildren(el('div', { class: 'snap' },
+      img,
+      el('div', { class: 'snap-name', text: ch.name }),
+      el('div', { class: 'snap-label', text: '▶ OK = ver en vivo con sonido' })));
+    setStatus(p, 'idle', 'Vista previa');
+  }
+
+  function demoteOne(except) {
+    const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.panel');
+    const cands = videoPanels().filter((q) => q !== except);
+    // Primero los silenciados sin foco, del último al primero.
+    cands.sort((a, b) => (a.muted === false) - (b.muted === false) || (a.root === focused) - (b.root === focused) || b.index - a.index);
+    const q = cands[0];
+    if (!q) return;
+    q.forceSnap = true;
+    mount(q);
+    q.forceSnap = false;
+  }
+
+  function promote(p) {
+    if (videoPanels().length >= tvPerf.max) demoteOne(p);
+    p.muted = false;
+    p.forceVideo = true;
+    mount(p);
+    p.forceVideo = false;
+    applyMute(p);
+  }
+
+  function involuntaryPause() {
+    const now = Date.now();
+    tvPerf.pauses = tvPerf.pauses.filter((t) => now - t < 20_000);
+    tvPerf.pauses.push(now);
+    const n = videoPanels().length;
+    if (tvPerf.pauses.length < 3 || n <= 1) return;
+    tvPerf.pauses = [];
+    tvPerf.max = n - 1;
+    store.set('bn.tv.maxVideos', tvPerf.max);
+    syncVideosBtn();
+    demoteOne(null);
+    toast(`Esta tele no da para ${n} videos a la vez: ahora se mueven ${tvPerf.max} y los demás muestran una vista previa (OK = verlo). Se cambia en el menú (▲).`);
+    // Un solo intento de reanudar los que quedaron (no en loop).
+    setTimeout(() => videoPanels().forEach((q) => { try { q.player && q.player.playVideo(); } catch {} }), 1500);
+  }
+
+  function syncVideosBtn() {
+    const b = $('#tv-videos');
+    if (b) b.textContent = `🎞 Videos a la vez: ${tvPerf.max}`;
+  }
+
   function mountYouTube(p, ch) {
     const live = catalog.youtube && catalog.youtube.status && catalog.youtube.status[ch.source];
+    if (wantsSnapshot(p) && !(live && live.live === false)) return mountSnapshot(p, ch, live);
     if (live && live.live === false) {
       setStatus(p, 'offline', 'Sin vivo ahora');
       fill(p.body,
@@ -245,6 +326,7 @@
       ? `https://www.youtube.com/embed/${encodeURIComponent(live.videoId)}?${params}`
       : `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(ch.source)}&${params}`;
     const f = frame(src, `${ch.name} — reproductor oficial de YouTube`);
+    p.mode = 'video';
     f.removeAttribute('loading');
     p.body.replaceChildren(f);
     applyLite(p);
@@ -263,12 +345,13 @@
           },
           onStateChange: (e) => {
             clearTimeout(p.timer);
-            if (e.data === YT.PlayerState.PLAYING) { clearTimeout(p.resume); setStatus(p, 'live', 'EN VIVO'); }
+            if (e.data === YT.PlayerState.PLAYING) setStatus(p, 'live', 'EN VIVO');
             else if (e.data === YT.PlayerState.BUFFERING) setStatus(p, 'loading', 'Cargando…');
             else if (e.data === YT.PlayerState.PAUSED) {
               setStatus(p, 'idle', 'En pausa');
-              // En la tele nadie pausa a propósito (no hay mouse): si se frenó, lo reanudamos.
-              if (TV) { clearTimeout(p.resume); p.resume = setTimeout(() => { try { p.player.playVideo(); } catch {} }, 1500); }
+              // En la tele nadie pausa a propósito (no hay mouse): si pasa seguido es que la
+              // tele no da para tantos videos juntos. NO se reanuda en loop (se pelearían).
+              if (TV) involuntaryPause();
             }
             else if (e.data === YT.PlayerState.ENDED) setStatus(p, 'offline', 'Transmisión terminada');
           },
@@ -370,8 +453,9 @@
       body.addEventListener('keydown', (e) => {
         if (e.target !== body || !(e.key === 'Enter' || e.key === ' ' || e.keyCode === 23)) return;
         e.preventDefault();
-        // Si el panel muestra un cartel (sin señal / sin vivo), OK reintenta.
-        if ($('.fallback', body)) mount(p, { force: true });
+        // Foto -> video con sonido; cartel (sin señal / sin vivo) -> reintentar; si no, sonido.
+        if (p.mode === 'snap') promote(p);
+        else if ($('.fallback', body)) mount(p, { force: true });
         else toggleMute(p);
       });
       select.addEventListener('change', () => { state.c[i] = select.value; persist(); mount(p); });
@@ -729,6 +813,19 @@
     for (const id of ['#tv-link', '#tv-btn']) { const n = $(id); if (n) n.hidden = true; }
     const nine = document.querySelector('.seg[data-g="3"]');
     if (nine) nine.hidden = true;
+    const vb = $('#tv-videos');
+    if (vb) {
+      vb.hidden = false;
+      syncVideosBtn();
+      vb.addEventListener('click', () => {
+        tvPerf.max = tvPerf.max <= 1 ? 4 : tvPerf.max - 1;
+        tvPerf.pauses = [];
+        store.set('bn.tv.maxVideos', tvPerf.max);
+        syncVideosBtn();
+        if (state.g > 1) renderGrid();
+        toast(`Se mueven ${tvPerf.max} video${tvPerf.max > 1 ? 's' : ''} a la vez; los demás muestran una vista previa (OK sobre uno = verlo).`);
+      });
+    }
     // El encabezado es un menú: se muestra mientras el foco está adentro.
     const top = $('.topbar');
     top.addEventListener('focusin', () => document.body.classList.add('tv-menu'));
