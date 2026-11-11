@@ -127,3 +127,8 @@ body.remote { background: var(--bg); }
 .rm-sound.on { background: var(--live); border-color: var(--live); color: #fff; }
 .rm-pstatus { grid-column: 2 / 4; margin: 0; }
 .rm-diag { font-family: var(--mono); font-size: 12px; }
+.rm-local {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin: 6px 0 4px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; color: var(--text); text-decoration: none;
+}
+.rm-local:hover, .rm-local:focus-visible { border-color: var(--accent); text-decoration: none; }

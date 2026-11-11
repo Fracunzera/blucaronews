@@ -18,6 +18,8 @@
   // Celu -> tele: la app del celu carga esta página en una pantalla invisible (emisor) y
   // la transmite a la tele como un solo video. Se maneja con window.bnRemote.
   const SENDER = /BlucaroNewsSender/.test(navigator.userAgent);
+  // Dentro de la app del celu (fuera de la transmisión): "Ver en la tele" vuelve al control remoto.
+  const PHONE_APP = /BlucaroNewsRemote/.test(navigator.userAgent);
   // La app de TV recibe del celu: anuncia su IP:puerto para mostrarla si hay que escribirla.
   const RECV = (/BNRecv\/([0-9.]+):(\d+)/.exec(navigator.userAgent) || []).slice(1);
 
@@ -1066,12 +1068,20 @@
   }
 
   // PWA: instalable desde el navegador (celular / compu). Sin tiendas.
+  function setupPhoneApp() {
+    if (!PHONE_APP) return;
+    const b = $('#tv-btn');
+    if (b) { b.href = '/remote'; b.replaceChildren(el('span', { 'aria-hidden': 'true', text: '📺' }), ' Mandar a la tele'); }
+    const l = $('#tv-link');
+    if (l) { l.href = '/remote'; l.textContent = '📺 Mandar a la tele'; }
+  }
+
   function setupPwa() {
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
     const btn = $('#install');
-    if (!btn || TV) return;
+    if (!btn || TV || PHONE_APP) return;
     let deferred = null;
     // Solo en el celular: en la compu "instalar" crea un acceso en el escritorio y confunde
     // (la gente lo toma por la app de la tele, que está en /tv).
@@ -1094,6 +1104,7 @@
   async function init() {
     readState();
     setupTv();
+    setupPhoneApp();
     setupPwa();
     keepAwake();
     tickClock();
