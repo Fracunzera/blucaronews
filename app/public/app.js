@@ -58,7 +58,7 @@
     codec: CODECS.includes(store.get('bn.tv.codec2', 'mixto')) ? store.get('bn.tv.codec2', 'mixto') : 'mixto',
   };
   // Formato que pide cada panel (lo lee el script de la app de TV dentro del reproductor).
-  const isMain = (p) => tvPerf.codec === 'mixto' && p.index === 0 && state.g > 1;
+  const isMain = (p) => tvPerf.codec === 'mixto' && p.index === 0 && panelCount() > 1;
   const codecFor = (p) => (tvPerf.codec === 'mixto' ? (p.index === 0 ? 'h264' : 'auto') : tvPerf.codec);
 
   const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k != null));
@@ -103,13 +103,19 @@
   function readState() {
     const p = new URLSearchParams(location.search);
     const saved = store.get(STORE_KEY, null);
-    const g = Number(p.get('g') || saved?.g || (TV ? 1 : 2));
-    state.g = [1, 2, 3].includes(g) ? g : 2;
+    // App de TV: arranca con 2 canales lado a lado ('d'); 4 es opcional, con aviso.
+    const raw = p.get('g') || (APP_TV ? store.get('bn.tv.g', 'd') : saved?.g) || (TV ? 1 : 2);
+    state.g = raw === 'd' ? 'd' : [1, 2, 3].includes(Number(raw)) ? Number(raw) : 2;
+    if (state.g === 'd' && !APP_TV) state.g = 2;
     // En la tele, más de 4 reproductores a la vez traban el equipo.
-    if (TV && state.g > 2) state.g = 2;
+    if (TV && state.g === 3) state.g = 2;
     const fromUrl = p.get('c');
     state.c = fromUrl != null ? fromUrl.split(',').map((s) => s.trim().slice(0, 40)) : Array.isArray(saved?.c) ? saved.c : [];
   }
+
+  // Cantidad de paneles y forma de la grilla ('d' = 2 lado a lado).
+  function panelCount() { return singleColumn() ? 1 : state.g === 'd' ? 2 : state.g * state.g; }
+  function gridShape() { return singleColumn() ? [1, 1] : state.g === 'd' ? [2, 1] : [state.g, state.g]; }
 
   function defaults() {
     // Completa los paneles sin asignar con canales que todavía no estén en la grilla.
@@ -121,12 +127,14 @@
     const u = new URL(location.href);
     u.search = '';
     u.searchParams.set('g', String(state.g));
-    u.searchParams.set('c', state.c.slice(0, state.g * state.g).join(','));
+    u.searchParams.set('c', state.c.slice(0, panelCount()).join(','));
     return u.toString();
   }
 
   function persist() {
-    store.set(STORE_KEY, { g: state.g, c: state.c.slice(0, 9) });
+    if (APP_TV) store.set('bn.tv.g', state.g);
+    else store.set(STORE_KEY, { g: state.g, c: state.c.slice(0, 9) });
+    if (APP_TV) store.set(STORE_KEY, { ...(store.get(STORE_KEY, {}) || {}), c: state.c.slice(0, 9) });
     try { history.replaceState(null, '', shareUrl()); } catch { /* ignorar */ }
   }
 
@@ -242,7 +250,8 @@
     // Ancho en px reales que queremos que vea YouTube: 1 canal ≈720p; con 4, el principal
     // (hardware) más, el que suena un poco más y el resto lo mínimo razonable.
     const q = QUALITY[tvPerf.level];
-    const target = state.g === 1 ? 1280 : isMain(p) ? q.main : p.muted === false && tvPerf.codec !== 'mixto' ? q.sound : q.other;
+    const n = panelCount();
+    const target = n === 1 ? 1280 : isMain(p) ? q.main : n === 2 ? q.sound : p.muted === false && tvPerf.codec !== 'mixto' ? q.sound : q.other;
     return Math.max(1, Math.min(4, (r.width * dpr) / target));
   }
 
@@ -470,9 +479,12 @@
     const grid = $('#grid');
     for (const p of panels) teardown(p);
     panels.length = 0;
-    const count = singleColumn() ? 1 : state.g * state.g;
+    const count = panelCount();
     const stagger = TV && INJECT && tvPerf.codec === 'mixto' && count > 1;
-    grid.style.setProperty('--g', String(singleColumn() ? 1 : state.g));
+    const [cols, rows] = gridShape();
+    grid.style.setProperty('--cols', String(cols));
+    grid.style.setProperty('--rows', String(rows));
+    grid.classList.toggle('dual', state.g === 'd' && !singleColumn());
     grid.replaceChildren();
     for (let i = 0; i < count; i++) {
       const select = channelSelect(i);
@@ -512,7 +524,7 @@
       panels[0].onFirstPlay = go;
       setTimeout(go, 8000);
     }
-    document.querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.g) === state.g)));
+    document.querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.g === String(state.g))));
   }
 
   // ======================================================================
@@ -761,11 +773,29 @@
     });
   }
 
+  // Aviso antes de pasar a 4 canales en la app de TV.
+  function warnFour(onYes) {
+    const close = () => { dlg.remove(); document.body.classList.remove('modal-open'); };
+    const yes = el('button', { type: 'button', class: 'btn primary', onclick: () => { close(); onYes(); } }, 'Probar con 4');
+    const no = el('button', { type: 'button', class: 'btn', onclick: () => { close(); panels[0]?.body.focus(); } }, 'Quedarme con 2');
+    const dlg = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'warn4-t' },
+      el('div', { class: 'modal-box' },
+        el('h2', { id: 'warn4-t', text: '¿Ver 4 canales a la vez?' }),
+        el('p', { text: 'Ver 4 videos juntos necesita mucha potencia. Muchas teles tienen un solo decodificador de video, así que con 4 canales los videos se pueden trabar, cortar o quedar congelados.' }),
+        el('p', { text: 'Si pasa, volvé a 2 desde el menú (▲ arriba de todo). Con un Chromecast con Google TV o un Fire TV Stick 4K Max suele andar mejor.' }),
+        el('div', { class: 'modal-actions' }, yes, no)));
+    dlg.close = close;
+    document.body.append(dlg);
+    document.body.classList.add('modal-open');
+    yes.focus();
+  }
+
   function setupLayout() {
+    const apply = (g) => { state.g = g; persist(); renderGrid(); if (TV) panels[0]?.body.focus(); };
     document.querySelectorAll('.seg').forEach((b) => b.addEventListener('click', () => {
-      state.g = Number(b.dataset.g);
-      persist();
-      renderGrid();
+      const g = b.dataset.g === 'd' ? 'd' : Number(b.dataset.g);
+      if (APP_TV && g === 2 && state.g !== 2) { warnFour(() => apply(2)); return; }
+      apply(g);
     }));
     MOBILE.addEventListener('change', renderGrid);
     if (TV) {
@@ -788,6 +818,8 @@
   const BACK_CODES = new Set([27, 461, 10009]); // Esc, webOS (461), Tizen (10009)
 
   function navTargets() {
+    const modal = $('.modal');
+    if (modal) return [...modal.querySelectorAll('button')];
     const sel = [
       '.topbar button:not([hidden])', '.panel-bar select', '.panel-bar button', '.panel-body[tabindex]',
       '#news-filter', '#news-list', '#ticker-pause',
@@ -824,6 +856,8 @@
   // Volver: si el foco no está en un panel, vuelve al primero. Devuelve true si lo usó
   // (la app de Android TV lo consulta para decidir si cierra la app).
   function tvBack() {
+    const modal = $('.modal');
+    if (modal) { modal.close(); panels[0]?.body.focus(); return true; }
     const cur = document.activeElement;
     if (cur && cur.classList && cur.classList.contains('panel-body')) return false;
     (panels[0]?.body)?.focus();
@@ -860,6 +894,8 @@
     for (const id of ['#tv-link', '#tv-btn']) { const n = $(id); if (n) n.hidden = true; }
     const nine = document.querySelector('.seg[data-g="3"]');
     if (nine) nine.hidden = true;
+    const two = document.querySelector('.seg[data-g="d"]');
+    if (two && APP_TV) two.hidden = false;
     const qb = $('#tv-quality');
     if (qb) {
       qb.hidden = false;
