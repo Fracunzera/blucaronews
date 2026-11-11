@@ -34,11 +34,21 @@
   })();
   const singleColumn = () => MOBILE.matches && !TV;
 
-  // Cuántos videos de YouTube se mueven a la vez en la tele. Cada tele tiene un límite de
-  // videos que puede decodificar juntos; si se pasa, el sistema pausa reproductores. Se
-  // ajusta solo (y se recuerda en esa tele) o a mano desde el menú. Los demás paneles
-  // muestran una vista previa del canal; OK sobre uno lo pasa a video.
-  const tvPerf = { max: Math.min(4, Math.max(1, Number(store.get('bn.tv.maxVideos', 4)) || 4)), pauses: [] };
+  // Rendimiento en la tele (la idea es ver 4 canales EN MOVIMIENTO a la vez).
+  // Como en los sistemas de cámaras: en la grilla va una versión liviana de cada video.
+  // Si la tele igual pausa videos (no le da el decodificador), se baja la calidad de
+  // todos un escalón (≈360/240p -> 240p -> 144p) y se reintenta con calma; se recuerda
+  // en esa tele. "Videos a la vez" (vista previa en el resto) queda solo como opción manual.
+  const QUALITY = [
+    { sound: 640, muted: 430, label: 'normal (≈360p / 240p)' },
+    { sound: 430, muted: 430, label: 'baja (≈240p)' },
+    { sound: 256, muted: 256, label: 'mínima (≈144p)' },
+  ];
+  const tvPerf = {
+    max: Math.min(4, Math.max(1, Number(store.get('bn.tv.videos.v2', 4)) || 4)),
+    level: Math.min(QUALITY.length - 1, Math.max(0, Number(store.get('bn.tv.quality', 0)) || 0)),
+    pauses: [],
+  };
 
   const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k != null));
 
@@ -190,6 +200,7 @@
 
   function teardown(p) {
     clearTimeout(p.timer);
+    clearTimeout(p.retryTimer);
     clearInterval(p.snapTimer);
     p.mode = null;
     p.root.classList.remove('is-snap');
@@ -220,7 +231,8 @@
     const dpr = window.devicePixelRatio || 1;
     // Ancho en px reales que queremos que vea YouTube: 1 canal ≈720p; con 4, el que suena
     // ≈360p y los silenciados ≈240p.
-    const target = state.g === 1 ? 1280 : p.muted === false ? 640 : 430;
+    const q = QUALITY[tvPerf.level];
+    const target = state.g === 1 ? 1280 : p.muted === false ? q.sound : q.muted;
     return Math.max(1, Math.min(4, (r.width * dpr) / target));
   }
 
@@ -280,25 +292,60 @@
     applyMute(p);
   }
 
-  function involuntaryPause() {
+  function involuntaryPause(p) {
     const now = Date.now();
+    p.pauseCount = (p.pauseCount || 0) + 1;
     tvPerf.pauses = tvPerf.pauses.filter((t) => now - t < 20_000);
     tvPerf.pauses.push(now);
-    const n = videoPanels().length;
-    if (tvPerf.pauses.length < 3 || n <= 1) return;
-    tvPerf.pauses = [];
-    tvPerf.max = n - 1;
-    store.set('bn.tv.maxVideos', tvPerf.max);
-    syncVideosBtn();
-    demoteOne(null);
-    toast(`Esta tele no da para ${n} videos a la vez: ahora se mueven ${tvPerf.max} y los demás muestran una vista previa (OK = verlo). Se cambia en el menú (▲).`);
-    // Un solo intento de reanudar los que quedaron (no en loop).
-    setTimeout(() => videoPanels().forEach((q) => { try { q.player && q.player.playVideo(); } catch {} }), 1500);
+    if (tvPerf.pauses.length >= 3 && tvPerf.level < QUALITY.length - 1) {
+      tvPerf.pauses = [];
+      tvPerf.level++;
+      store.set('bn.tv.quality', tvPerf.level);
+      panels.forEach(applyLite);
+      syncQualityBtn();
+      toast(`La tele se estaba trabando: bajé la calidad a ${QUALITY[tvPerf.level].label} para que pueda con todos.`);
+    }
+    // Reintento tranquilo y limitado: como mucho 1 cada 6 s por panel y 5 por minuto.
+    p.retries = (p.retries || []).filter((t) => now - t < 60_000);
+    if (p.retries.length >= 5) return;
+    clearTimeout(p.retryTimer);
+    p.retryTimer = setTimeout(() => {
+      p.retries.push(Date.now());
+      try { if (p.player && p.player.getPlayerState() === 2) p.player.playVideo(); } catch {}
+    }, 6000);
+  }
+
+  function syncQualityBtn() {
+    const b = $('#tv-quality');
+    if (b) b.textContent = `⚙ Calidad: ${['normal', 'baja', 'mínima'][tvPerf.level]}`;
+  }
+
+  // Diagnóstico en pantalla: qué calidad manda YouTube a cada panel y cuántas pausas tuvo.
+  let diagTimer = null;
+  function toggleDiag() {
+    const on = !document.body.classList.contains('tv-diag');
+    document.body.classList.toggle('tv-diag', on);
+    clearInterval(diagTimer);
+    document.querySelectorAll('.diag').forEach((n) => n.remove());
+    if (!on) return;
+    const STATES = { '-1': 'sin iniciar', 0: 'terminó', 1: 'reproduciendo', 2: 'PAUSADO', 3: 'cargando', 5: 'en cola' };
+    const tick = () => panels.forEach((p) => {
+      let box = $('.diag', p.root);
+      if (!box) { box = el('div', { class: 'diag' }); p.root.append(box); }
+      let q = '—', st = '—', fr = '—';
+      try { q = p.player.getPlaybackQuality(); st = STATES[p.player.getPlayerState()] || p.player.getPlayerState(); fr = (p.player.getVideoLoadedFraction() * 100).toFixed(0) + '%'; } catch {}
+      const f = $('iframe', p.body);
+      const px = f ? `${Math.round(f.offsetWidth * (window.devicePixelRatio || 1))}px` : '—';
+      box.textContent = `${p.mode || '—'} · ${st} · calidad ${q} · player ${px} · pausas ${p.pauseCount || 0}`;
+    });
+    tick();
+    diagTimer = setInterval(tick, 2000);
+    toast(`Diagnóstico: pantalla ${screen.width}x${screen.height} · ventana ${innerWidth}x${innerHeight} · densidad ${devicePixelRatio} · calidad ${['normal', 'baja', 'mínima'][tvPerf.level]}`);
   }
 
   function syncVideosBtn() {
     const b = $('#tv-videos');
-    if (b) b.textContent = `🎞 Videos a la vez: ${tvPerf.max}`;
+    if (b) b.textContent = `🎞 Videos: ${tvPerf.max}`;
   }
 
   function mountYouTube(p, ch) {
@@ -351,7 +398,7 @@
               setStatus(p, 'idle', 'En pausa');
               // En la tele nadie pausa a propósito (no hay mouse): si pasa seguido es que la
               // tele no da para tantos videos juntos. NO se reanuda en loop (se pelearían).
-              if (TV) involuntaryPause();
+              if (TV) involuntaryPause(p);
             }
             else if (e.data === YT.PlayerState.ENDED) setStatus(p, 'offline', 'Transmisión terminada');
           },
@@ -820,11 +867,29 @@
       vb.addEventListener('click', () => {
         tvPerf.max = tvPerf.max <= 1 ? 4 : tvPerf.max - 1;
         tvPerf.pauses = [];
-        store.set('bn.tv.maxVideos', tvPerf.max);
+        store.set('bn.tv.videos.v2', tvPerf.max);
         syncVideosBtn();
         if (state.g > 1) renderGrid();
-        toast(`Se mueven ${tvPerf.max} video${tvPerf.max > 1 ? 's' : ''} a la vez; los demás muestran una vista previa (OK sobre uno = verlo).`);
+        toast(tvPerf.max === 4 ? 'Los 4 canales en movimiento.' : `Se mueven ${tvPerf.max} a la vez; los demás muestran una vista previa (OK sobre uno = verlo).`);
       });
+    }
+    const qb = $('#tv-quality');
+    if (qb) {
+      qb.hidden = false;
+      syncQualityBtn();
+      qb.addEventListener('click', () => {
+        tvPerf.level = (tvPerf.level + 1) % QUALITY.length;
+        store.set('bn.tv.quality', tvPerf.level);
+        tvPerf.pauses = [];
+        syncQualityBtn();
+        panels.forEach(applyLite);
+        toast(`Calidad ${QUALITY[tvPerf.level].label}`);
+      });
+    }
+    const db = $('#tv-diag');
+    if (db) {
+      db.hidden = false;
+      db.addEventListener('click', () => toggleDiag());
     }
     // El encabezado es un menú: se muestra mientras el foco está adentro.
     const top = $('.topbar');
