@@ -583,7 +583,14 @@
       try {
         if (navigator.share && singleColumn()) { await navigator.share({ title: document.title, url }); return; }
         await navigator.clipboard.writeText(url);
-        toast('✓ Enlace copiado: abre esta misma grilla');
+        // Respuesta bien visible en el propio botón (el aviso solo pasaba desapercibido).
+        const b = $('#share');
+        clearTimeout(b.resetTimer);
+        if (!b.dataset.html) b.dataset.html = b.innerHTML;
+        b.classList.add('done');
+        b.textContent = '✓ ¡Link copiado!';
+        b.resetTimer = setTimeout(() => { b.innerHTML = b.dataset.html; b.classList.remove('done'); }, 2500);
+        toast('Link copiado. Pegalo en WhatsApp o donde quieras: abre esta misma grilla de canales.');
       } catch {
         window.prompt('Copiá este enlace:', url);
       }
