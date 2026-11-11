@@ -84,7 +84,12 @@ public class CastService extends Service {
     private Presentation presentation;
     private WebView web;
     private MediaProjection projection;
-    private AudioRecord recorder;
+    private volatile AudioRecord recorder;
+    // Sonido: primero solo el de esta app (los canales), así WhatsApp, Spotify, etc. no
+    // van a la tele. Si en este celu no llega nada así, se pasa a todo el sonido multimedia.
+    private volatile boolean appOnly;
+    private volatile boolean heardApp;
+    private long soundLiveSince;
     private Socket tvSocket;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
@@ -295,23 +300,9 @@ public class CastService extends Service {
 
     private void startAudio() throws Exception {
         if (Build.VERSION.SDK_INT < 29) throw new IllegalStateException("Android < 10");
-        // Se captura el sonido "multimedia" del celu (los reproductores de YouTube de la grilla).
-        AudioPlaybackCaptureConfiguration cfg = new AudioPlaybackCaptureConfiguration.Builder(projection)
-            .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-            .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-            .addMatchingUsage(AudioAttributes.USAGE_GAME)
-            .build();
-        AudioFormat fmt = new AudioFormat.Builder()
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(SAMPLE_RATE)
-            .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
-            .build();
-        int min = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT);
-        recorder = new AudioRecord.Builder()
-            .setAudioFormat(fmt)
-            .setBufferSizeInBytes(Math.max(min * 4, 4096 * 8))
-            .setAudioPlaybackCaptureConfig(cfg)
-            .build();
+        recorder = buildRecorder(true);
+        appOnly = true;
+        heardApp = false;
 
         MediaFormat af = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, SAMPLE_RATE, CHANNELS);
         af.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
@@ -321,12 +312,74 @@ public class CastService extends Service {
         aenc.configure(af, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         aenc.start();
         recorder.startRecording();
-        audioState = "capturando";
+        audioState = "capturando (solo los canales)";
 
         Thread t = new Thread(new Runnable() {
             @Override public void run() { audioLoop(); }
         }, "bn-audio");
         t.start();
+    }
+
+    /** {@code onlyThisApp}: solo el sonido de esta app; si no, todo el sonido multimedia del celu. */
+    private AudioRecord buildRecorder(boolean onlyThisApp) {
+        AudioPlaybackCaptureConfiguration.Builder b = new AudioPlaybackCaptureConfiguration.Builder(projection);
+        if (onlyThisApp) {
+            b.addMatchingUid(android.os.Process.myUid());
+        } else {
+            b.addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                .addMatchingUsage(AudioAttributes.USAGE_GAME);
+        }
+        AudioFormat fmt = new AudioFormat.Builder()
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .setSampleRate(SAMPLE_RATE)
+            .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
+            .build();
+        int min = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT);
+        return new AudioRecord.Builder()
+            .setAudioFormat(fmt)
+            .setBufferSizeInBytes(Math.max(min * 4, 4096 * 8))
+            .setAudioPlaybackCaptureConfig(b.build())
+            .build();
+    }
+
+    /**
+     * Red de seguridad: si hay un canal con sonido y EN VIVO hace 12 s pero de "solo esta
+     * app" no llegó nada, este celu atribuye el sonido de los videos a otro proceso: pasamos
+     * a capturar todo el sonido multimedia (como antes) para que la tele no quede muda.
+     */
+    private void checkAudioFallback() {
+        if (!appOnly || heardApp || recorder == null) { soundLiveSince = 0; return; }
+        boolean live = false;
+        try {
+            Object v = new org.json.JSONTokener(pageState).nextValue();
+            if (v instanceof JSONObject) {
+                org.json.JSONArray ps = ((JSONObject) v).optJSONArray("panels");
+                for (int i = 0; ps != null && i < ps.length(); i++) {
+                    JSONObject p = ps.getJSONObject(i);
+                    if (p.optBoolean("sound") && p.optString("status").contains("EN VIVO")) live = true;
+                }
+            }
+        } catch (Throwable ignored) { }
+        long now = System.currentTimeMillis();
+        if (!live) { soundLiveSince = 0; return; }
+        if (soundLiveSince == 0) { soundLiveSince = now; return; }
+        if (now - soundLiveSince < 12_000) return;
+        appOnly = false;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    AudioRecord next = buildRecorder(false);
+                    next.startRecording();
+                    AudioRecord old = recorder;
+                    recorder = next;
+                    try { old.stop(); old.release(); } catch (Throwable ignored) { }
+                    audioState = "capturando todo el sonido del celu (este celu no deja separar el de los canales)";
+                } catch (Throwable t) {
+                    audioState = "no disponible (" + t.getClass().getSimpleName() + ")";
+                }
+            }
+        }, "bn-audio-amplio").start();
     }
 
     private void audioLoop() {
@@ -337,7 +390,9 @@ public class CastService extends Service {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         while (running) {
             int n;
-            try { n = recorder.read(pcm, 0, chunk); } catch (Throwable t) { break; }
+            AudioRecord r = recorder;
+            if (r == null) break;
+            try { n = r.read(pcm, 0, chunk); } catch (Throwable t) { if (r != recorder) continue; break; }
             if (n <= 0) continue;
             if (startUs < 0) startUs = System.nanoTime() / 1000 - 20_000;
             long ptsUs = startUs + samples * 1_000_000L / SAMPLE_RATE;
@@ -349,6 +404,7 @@ public class CastService extends Service {
                 peak = Math.max(peak, Math.abs(v));
             }
             audioLevel = peak * 100 / 32768;
+            if (appOnly && peak > 0) heardApp = true;
             try {
                 int in = aenc.dequeueInputBuffer(10_000);
                 if (in >= 0) {
@@ -453,6 +509,7 @@ public class CastService extends Service {
                     @Override public void onReceiveValue(String v) {
                         try { pageState = v == null ? "null" : new org.json.JSONTokener(v).nextValue().toString(); }
                         catch (Throwable t) { pageState = "null"; }
+                        checkAudioFallback();
                     }
                 });
             } catch (Throwable ignored) { }
