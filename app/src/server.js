@@ -115,20 +115,25 @@ function apkInfo() {
   }
 }
 
+app.get('/remote', (req, reply) => reply.header('X-Robots-Tag', 'noindex').type('text/html; charset=utf-8').send(page('remote.html')));
+
 app.get('/tv', (req, reply) => reply.type('text/html; charset=utf-8').send(page('tv.html').replaceAll('{{APK_INFO}}', apkInfo())));
 
-app.get('/tv.apk', (req, reply) => {
+// Es la misma app para la tele y para el celu: /app.apk es el mismo archivo.
+function sendApk(req, reply) {
   let st;
   try { st = fs.statSync(APK_PATH); } catch {
     return reply.code(404).type('text/plain; charset=utf-8').send('Todavía no hay APK publicado. Ver /tv');
   }
   return reply
     .header('Content-Type', 'application/vnd.android.package-archive')
-    .header('Content-Disposition', 'attachment; filename="blucaronews-tv.apk"')
+    .header('Content-Disposition', 'attachment; filename="blucaronews.apk"')
     .header('Content-Length', st.size)
     .header('Cache-Control', 'no-cache')
     .send(fs.createReadStream(APK_PATH));
-});
+}
+app.get('/tv.apk', sendApk);
+app.get('/app.apk', sendApk);
 
 app.get('/robots.txt', (req, reply) => reply.type('text/plain').send('User-agent: *\nDisallow: /admin\nDisallow: /api/\n'));
 

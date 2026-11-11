@@ -2,6 +2,7 @@ package site.blucaro.news;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -38,11 +39,18 @@ public class MainActivity extends Activity {
     private WebView web;
     private View customView;
     private WebChromeClient.CustomViewCallback customCallback;
+    private TvReceiver receiver;
     private final Chrome chrome = new Chrome();
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // En un celu o tablet, la app es el control remoto que transmite a la tele.
+        if (!isTv()) {
+            startActivity(new Intent(this, RemoteActivity.class));
+            finish();
+            return;
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON | WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         root = new FrameLayout(this);
@@ -63,7 +71,12 @@ public class MainActivity extends Activity {
         // Script dentro del reproductor oficial de YouTube: elegir H.264 (lo más liviano para
         // la tele) y medir cuadros perdidos. Si el WebView de la tele no lo soporta, sigue sin él.
         boolean inject = injectYoutubeScript();
-        s.setUserAgentString(s.getUserAgentString() + " BlucaroNewsTV/" + versionName() + (inject ? " BNInject/1" : ""));
+        // Recibir del celu: la tele se anuncia en el Wi-Fi y le cuenta a la página su IP.
+        receiver = new TvReceiver(this, root, web, HOME);
+        int recvPort = receiver.start();
+        String ip = TvReceiver.localIp();
+        String recv = recvPort > 0 ? " BNRecv/" + (ip != null ? ip : "0.0.0.0") + ":" + recvPort : "";
+        s.setUserAgentString(s.getUserAgentString() + " BlucaroNewsTV/" + versionName() + (inject ? " BNInject/1" : "") + recv);
 
         web.setWebViewClient(new Client());
         web.setWebChromeClient(chrome);
@@ -90,6 +103,15 @@ public class MainActivity extends Activity {
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    private boolean isTv() {
+        try {
+            android.app.UiModeManager um = (android.app.UiModeManager) getSystemService(UI_MODE_SERVICE);
+            if (um != null && um.getCurrentModeType() == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) return true;
+        } catch (Throwable ignored) { }
+        PackageManager pm = getPackageManager();
+        return pm.hasSystemFeature("android.software.leanback") || pm.hasSystemFeature("android.hardware.type.television");
     }
 
     private String versionName() {
@@ -170,6 +192,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (receiver != null && receiver.isReceiving()) {
+            receiver.stopReceiving(true);
+            return;
+        }
         if (customView != null) {
             chrome.onHideCustomView();
             return;
@@ -202,7 +228,15 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        // Si salen de la app mientras recibe, se corta (y se le avisa al celu).
+        if (receiver != null && receiver.isReceiving()) receiver.stopReceiving(true);
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
+        if (receiver != null) receiver.stop();
         if (web != null) {
             root.removeView(web);
             web.destroy();
