@@ -341,16 +341,6 @@ html.tv .panel:not(.unmuted):not(:focus-within) .tv-hint { display: none; }
 html.tv #news-list:focus { outline: 3px solid var(--focus); outline-offset: -3px; }
 html.tv .ticker-btn:focus { outline-offset: -3px; }
 
-/* Panel "vista previa" (modo TV con más canales que videos que aguanta la tele). */
-.snap { position: absolute; inset: 0; background: #000; overflow: hidden; }
-.snap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.snap-name { position: absolute; left: 10px; top: 8px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 1px 4px #000; }
-.snap-label {
-  position: absolute; right: 8px; bottom: 8px; background: rgba(0, 0, 0, .75); color: #fff;
-  border-radius: 6px; padding: 3px 10px; font-size: 13px; font-weight: 600;
-}
-html.tv .panel:focus-within .snap-name { display: none; }
-html.tv .panel.is-snap .tv-hint { display: none; }
 .diag {
   position: absolute; left: 4px; right: 4px; top: 50%; transform: translateY(-50%); z-index: 6; pointer-events: none;
   background: rgba(0, 0, 0, .8); color: #7ee787; font: 600 13px/1.3 var(--mono); padding: 4px 8px; border-radius: 4px; text-align: center;

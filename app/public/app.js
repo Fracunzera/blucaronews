@@ -37,22 +37,29 @@
   })();
   const singleColumn = () => MOBILE.matches && !TV;
 
-  // Rendimiento en la tele (la idea es ver 4 canales EN MOVIMIENTO a la vez).
-  // Como en los sistemas de cámaras: en la grilla va una versión liviana de cada video.
-  // Si la tele igual pausa videos (no le da el decodificador), se baja la calidad de
-  // todos un escalón (≈360/240p -> 240p -> 144p) y se reintenta con calma; se recuerda
-  // en esa tele. "Videos a la vez" (vista previa en el resto) queda solo como opción manual.
+  // Rendimiento en la tele: la idea es ver 4 canales EN MOVIMIENTO a la vez.
+  // Muchas teles tienen UN solo decodificador de video por hardware. En el WebView de
+  // Android, H.264 solo se decodifica por hardware (no hay H.264 por software), mientras
+  // que VP9 sí tiene decodificador por software. Por eso, en modo "mixto":
+  //   - el panel 1 pide H.264 y arranca primero: se queda con el decodificador de la tele;
+  //   - los otros 3 piden el formato automático (VP9) en baja resolución: van por software.
+  // Como en los sistemas de cámaras: el principal con buena calidad, los demás livianos.
+  // Si igual se traba, se baja la calidad un escalón y se recuerda en esa tele.
   const QUALITY = [
-    { sound: 640, muted: 430, label: 'normal (≈360p / 240p)' },
-    { sound: 430, muted: 430, label: 'baja (≈240p)' },
-    { sound: 256, muted: 256, label: 'mínima (≈144p)' },
+    { main: 960, sound: 640, other: 430, label: 'normal (principal ≈480p, resto ≈240p)' },
+    { main: 640, sound: 430, other: 256, label: 'baja (principal ≈360p, resto ≈144p)' },
+    { main: 430, sound: 256, other: 256, label: 'mínima (≈240p / 144p)' },
   ];
+  const CODECS = ['mixto', 'h264', 'auto'];
   const tvPerf = {
-    max: Math.min(4, Math.max(1, Number(store.get('bn.tv.videos.v2', 4)) || 4)),
     level: Math.min(QUALITY.length - 1, Math.max(0, Number(store.get('bn.tv.quality', 0)) || 0)),
-    pauses: [],
-    codec: store.get('bn.tv.codec', 'h264') === 'auto' ? 'auto' : 'h264',
+    struggles: [],
+    lastChange: 0,
+    codec: CODECS.includes(store.get('bn.tv.codec2', 'mixto')) ? store.get('bn.tv.codec2', 'mixto') : 'mixto',
   };
+  // Formato que pide cada panel (lo lee el script de la app de TV dentro del reproductor).
+  const isMain = (p) => tvPerf.codec === 'mixto' && p.index === 0 && state.g > 1;
+  const codecFor = (p) => (tvPerf.codec === 'mixto' ? (p.index === 0 ? 'h264' : 'auto') : tvPerf.codec);
 
   const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k != null));
 
@@ -205,9 +212,8 @@
   function teardown(p) {
     clearTimeout(p.timer);
     clearTimeout(p.retryTimer);
-    clearInterval(p.snapTimer);
     p.mode = null;
-    p.root.classList.remove('is-snap');
+    p.onFirstPlay = null;
     if (p.player && p.player.destroy) { try { p.player.destroy(); } catch { /* ignorar */ } }
     p.player = null;
     p.body.replaceChildren();
@@ -233,10 +239,10 @@
     if (!TV) return 1;
     const r = p.body.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    // Ancho en px reales que queremos que vea YouTube: 1 canal ≈720p; con 4, el que suena
-    // ≈360p y los silenciados ≈240p.
+    // Ancho en px reales que queremos que vea YouTube: 1 canal ≈720p; con 4, el principal
+    // (hardware) más, el que suena un poco más y el resto lo mínimo razonable.
     const q = QUALITY[tvPerf.level];
-    const target = state.g === 1 ? 1280 : p.muted === false ? q.sound : q.muted;
+    const target = state.g === 1 ? 1280 : isMain(p) ? q.main : p.muted === false && tvPerf.codec !== 'mixto' ? q.sound : q.other;
     return Math.max(1, Math.min(4, (r.width * dpr) / target));
   }
 
@@ -248,67 +254,25 @@
     f.classList.toggle('lite', k > 1.05);
   }
 
-  const videoPanels = () => panels.filter((q) => q.mode === 'video');
-
-  function wantsSnapshot(p) {
-    if (!TV || state.g === 1) return false;
-    if (p.forceSnap) return true;
-    if (p.forceVideo) return false;
-    return videoPanels().filter((q) => q !== p).length >= tvPerf.max;
-  }
-
-  // Panel "vista previa": la miniatura oficial del vivo (i.ytimg.com; suele ser la imagen
-  // que eligió el canal, no un cuadro actual). Casi no usa la tele. OK lo pasa a video.
-  function mountSnapshot(p, ch, live) {
-    p.mode = 'snap';
-    p.root.classList.add('is-snap');
-    const vid = live && live.videoId;
-    const img = vid ? el('img', { alt: '', src: `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/hqdefault_live.jpg?t=${Date.now()}` }) : null;
-    if (img) {
-      p.snapTimer = setInterval(() => { img.src = `https://i.ytimg.com/vi/${encodeURIComponent(vid)}/hqdefault_live.jpg?t=${Date.now()}`; }, 30_000);
-      img.addEventListener('error', () => img.remove());
-    }
-    p.body.replaceChildren(el('div', { class: 'snap' },
-      img,
-      el('div', { class: 'snap-name', text: ch.name }),
-      el('div', { class: 'snap-label', text: '▶ OK = ver en vivo con sonido' })));
-    setStatus(p, 'idle', 'Vista previa');
-  }
-
-  function demoteOne(except) {
-    const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.panel');
-    const cands = videoPanels().filter((q) => q !== except);
-    // Primero los silenciados sin foco, del último al primero.
-    cands.sort((a, b) => (a.muted === false) - (b.muted === false) || (a.root === focused) - (b.root === focused) || b.index - a.index);
-    const q = cands[0];
-    if (!q) return;
-    q.forceSnap = true;
-    mount(q);
-    q.forceSnap = false;
-  }
-
-  function promote(p) {
-    if (videoPanels().length >= tvPerf.max) demoteOne(p);
-    p.muted = false;
-    p.forceVideo = true;
-    mount(p);
-    p.forceVideo = false;
-    applyMute(p);
-  }
-
-  function involuntaryPause(p) {
+  // Se traba: pausas solas o cortes (vuelve a "cargando" después de haber arrancado).
+  // 4 problemas en 30 s => calidad un escalón más baja (con 30 s de espera entre cambios,
+  // porque al cambiar de calidad el reproductor recarga un momento).
+  function struggle(p, kind) {
     const now = Date.now();
-    p.pauseCount = (p.pauseCount || 0) + 1;
-    tvPerf.pauses = tvPerf.pauses.filter((t) => now - t < 20_000);
-    tvPerf.pauses.push(now);
-    if (tvPerf.pauses.length >= 3 && tvPerf.level < QUALITY.length - 1) {
-      tvPerf.pauses = [];
+    if (kind === 'pause') p.pauseCount = (p.pauseCount || 0) + 1;
+    else p.stallCount = (p.stallCount || 0) + 1;
+    tvPerf.struggles = tvPerf.struggles.filter((t) => now - t < 30_000);
+    tvPerf.struggles.push(now);
+    if (tvPerf.struggles.length >= 4 && tvPerf.level < QUALITY.length - 1 && now - tvPerf.lastChange > 30_000) {
+      tvPerf.struggles = [];
+      tvPerf.lastChange = now;
       tvPerf.level++;
       store.set('bn.tv.quality', tvPerf.level);
       panels.forEach(applyLite);
       syncQualityBtn();
-      toast(`La tele se estaba trabando: bajé la calidad a ${QUALITY[tvPerf.level].label} para que pueda con todos.`);
+      toast(`La tele se estaba trabando: bajé la calidad a ${QUALITY[tvPerf.level].label}.`);
     }
+    if (kind !== 'pause') return;
     // Reintento tranquilo y limitado: como mucho 1 cada 6 s por panel y 5 por minuto.
     p.retries = (p.retries || []).filter((t) => now - t < 60_000);
     if (p.retries.length >= 5) return;
@@ -355,7 +319,8 @@
         const lost = y.dTotal > 0 ? Math.round((100 * Math.max(0, y.dDropped)) / y.dTotal) : 0;
         extra = `\n${y.codec || '?'} ${y.w}x${y.h} · cuadros perdidos ${lost}% (total ${y.total > 0 ? Math.round((100 * y.dropped) / y.total) : 0}%)`;
       }
-      box.textContent = `${st} · calidad ${q} · player ${px} · pausas ${p.pauseCount || 0}${extra}`;
+      const role = INJECT ? `${isMain(p) ? 'PRINCIPAL' : 'panel'} pide ${codecFor(p)} · ` : '';
+      box.textContent = `${role}${st} · calidad ${q} · player ${px} · pausas ${p.pauseCount || 0} · cortes ${p.stallCount || 0}${extra}`;
     });
     tick();
     diagTimer = setInterval(tick, 2000);
@@ -363,14 +328,8 @@
     toast(`Diagnóstico: WebView ${chrome} · ventana ${innerWidth}x${innerHeight} · densidad ${devicePixelRatio} · calidad ${['normal', 'baja', 'mínima'][tvPerf.level]}${INJECT ? ` · formato ${tvPerf.codec}` : ' · app vieja (sin medición de cuadros)'}`);
   }
 
-  function syncVideosBtn() {
-    const b = $('#tv-videos');
-    if (b) b.textContent = `🎞 Videos: ${tvPerf.max}`;
-  }
-
   function mountYouTube(p, ch) {
     const live = catalog.youtube && catalog.youtube.status && catalog.youtube.status[ch.source];
-    if (wantsSnapshot(p) && !(live && live.live === false)) return mountSnapshot(p, ch, live);
     if (live && live.live === false) {
       setStatus(p, 'offline', 'Sin vivo ahora');
       fill(p.body,
@@ -389,7 +348,8 @@
       autoplay: '1', mute: '1', playsinline: '1', rel: '0', enablejsapi: '1', origin: location.origin,
     });
     if (TV) { params.set('controls', '0'); params.set('disablekb', '1'); params.set('fs', '0'); params.set('iv_load_policy', '3'); }
-    if (INJECT) params.set('bn_codec', tvPerf.codec); // lo lee el script de la app de TV
+    if (INJECT) params.set('bn_codec', codecFor(p)); // lo lee el script de la app de TV
+    p.everPlayed = false;
     const src = live && live.videoId
       ? `https://www.youtube.com/embed/${encodeURIComponent(live.videoId)}?${params}`
       : `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(ch.source)}&${params}`;
@@ -413,13 +373,19 @@
           },
           onStateChange: (e) => {
             clearTimeout(p.timer);
-            if (e.data === YT.PlayerState.PLAYING) setStatus(p, 'live', 'EN VIVO');
-            else if (e.data === YT.PlayerState.BUFFERING) setStatus(p, 'loading', 'Cargando…');
+            if (e.data === YT.PlayerState.PLAYING) {
+              setStatus(p, 'live', 'EN VIVO');
+              p.everPlayed = true;
+              if (p.onFirstPlay) { const go = p.onFirstPlay; p.onFirstPlay = null; go(); }
+            } else if (e.data === YT.PlayerState.BUFFERING) {
+              setStatus(p, 'loading', 'Cargando…');
+              if (TV && p.everPlayed) struggle(p, 'stall');
+            }
             else if (e.data === YT.PlayerState.PAUSED) {
               setStatus(p, 'idle', 'En pausa');
               // En la tele nadie pausa a propósito (no hay mouse): si pasa seguido es que la
               // tele no da para tantos videos juntos. NO se reanuda en loop (se pelearían).
-              if (TV) involuntaryPause(p);
+              if (TV) struggle(p, 'pause');
             }
             else if (e.data === YT.PlayerState.ENDED) setStatus(p, 'offline', 'Transmisión terminada');
           },
@@ -505,6 +471,7 @@
     for (const p of panels) teardown(p);
     panels.length = 0;
     const count = singleColumn() ? 1 : state.g * state.g;
+    const stagger = TV && INJECT && tvPerf.codec === 'mixto' && count > 1;
     grid.style.setProperty('--g', String(singleColumn() ? 1 : state.g));
     grid.replaceChildren();
     for (let i = 0; i < count; i++) {
@@ -521,17 +488,29 @@
       body.addEventListener('keydown', (e) => {
         if (e.target !== body || !(e.key === 'Enter' || e.key === ' ' || e.keyCode === 23)) return;
         e.preventDefault();
-        // Foto -> video con sonido; cartel (sin señal / sin vivo) -> reintentar; si no, sonido.
-        if (p.mode === 'snap') promote(p);
-        else if ($('.fallback', body)) mount(p, { force: true });
+        // Cartel (sin señal / sin vivo) -> reintentar; si no, activar/silenciar el sonido.
+        if ($('.fallback', body)) mount(p, { force: true });
         else toggleMute(p);
       });
       select.addEventListener('change', () => { state.c[i] = select.value; persist(); mount(p); });
       reload.addEventListener('click', () => mount(p, { force: true }));
       panels.push(p);
       grid.append(root);
-      mount(p);
-      applyMute(p);
+      if (stagger && i > 0) setStatus(p, 'loading', 'En espera…');
+      else { mount(p); applyMute(p); }
+    }
+    if (stagger) {
+      // El principal arranca solo y se queda con el decodificador de la tele; los demás
+      // entran de a uno (1,5 s entre cada uno) cuando ya está reproduciendo, o a los 8 s.
+      const rest = panels.slice(1);
+      let started = false;
+      const go = () => {
+        if (started) return;
+        started = true;
+        rest.forEach((q, k) => setTimeout(() => { if (panels.includes(q)) { mount(q); applyMute(q); } }, k * 1500));
+      };
+      panels[0].onFirstPlay = go;
+      setTimeout(go, 8000);
     }
     document.querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.g) === state.g)));
   }
@@ -881,19 +860,6 @@
     for (const id of ['#tv-link', '#tv-btn']) { const n = $(id); if (n) n.hidden = true; }
     const nine = document.querySelector('.seg[data-g="3"]');
     if (nine) nine.hidden = true;
-    const vb = $('#tv-videos');
-    if (vb) {
-      vb.hidden = false;
-      syncVideosBtn();
-      vb.addEventListener('click', () => {
-        tvPerf.max = tvPerf.max <= 1 ? 4 : tvPerf.max - 1;
-        tvPerf.pauses = [];
-        store.set('bn.tv.videos.v2', tvPerf.max);
-        syncVideosBtn();
-        if (state.g > 1) renderGrid();
-        toast(tvPerf.max === 4 ? 'Los 4 canales en movimiento.' : `Se mueven ${tvPerf.max} a la vez; los demás muestran una vista previa (OK sobre uno = verlo).`);
-      });
-    }
     const qb = $('#tv-quality');
     if (qb) {
       qb.hidden = false;
@@ -910,14 +876,20 @@
     const cb = $('#tv-codec');
     if (cb && INJECT) {
       cb.hidden = false;
-      const sync = () => { cb.textContent = `🎛 Formato: ${tvPerf.codec === 'h264' ? 'H.264' : 'automático'}`; };
+      const NAMES = { mixto: 'mixto', h264: 'H.264', auto: 'automático' };
+      const HELP = {
+        mixto: 'Formato mixto: el panel 1 usa el decodificador de la tele (H.264) y los otros 3 van livianos por software.',
+        h264: 'Formato H.264 en todos: ideal para 1 canal; con 4, en teles con un solo decodificador se congelan los demás.',
+        auto: 'Formato automático: YouTube elige en cada panel.',
+      };
+      const sync = () => { cb.textContent = `🎛 Formato: ${NAMES[tvPerf.codec]}`; };
       sync();
       cb.addEventListener('click', () => {
-        tvPerf.codec = tvPerf.codec === 'h264' ? 'auto' : 'h264';
-        store.set('bn.tv.codec', tvPerf.codec);
+        tvPerf.codec = CODECS[(CODECS.indexOf(tvPerf.codec) + 1) % CODECS.length];
+        store.set('bn.tv.codec2', tvPerf.codec);
         sync();
         renderGrid();
-        toast(tvPerf.codec === 'h264' ? 'Formato H.264: el más liviano para la tele.' : 'Formato automático: YouTube elige (VP9/AV1/H.264).');
+        toast(HELP[tvPerf.codec]);
       });
     }
     const db = $('#tv-diag');
