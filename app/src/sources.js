@@ -134,7 +134,11 @@ export async function fetchYoutubeLive(channelIds) {
     }),
   );
   const ids = [...byVideo.keys()];
-  const result = Object.fromEntries(channelIds.map((c) => [c, { live: false, videoId: null, embeddable: null }]));
+  // Si el vivo no aparece entre los últimos videos del feed NO se puede afirmar que no
+  // haya vivo: los canales 24 h tienen la transmisión abierta desde hace semanas y queda
+  // fuera del feed. Por eso el default es live: null (desconocido) y el navegador carga
+  // igual el reproductor; solo se usa lo que la API confirma.
+  const result = Object.fromEntries(channelIds.map((c) => [c, { live: null, videoId: null, embeddable: null }]));
   for (let i = 0; i < ids.length; i += 50) {
     const q = new URLSearchParams({
       part: 'snippet,status',
