@@ -272,6 +272,12 @@
     else p.stallCount = (p.stallCount || 0) + 1;
     tvPerf.struggles = tvPerf.struggles.filter((t) => now - t < 30_000);
     tvPerf.struggles.push(now);
+    // App de TV con más de un canal: si se traban seguido, esa tele no da para varios
+    // videos juntos (bajar la calidad no lo arregla y entra en un ciclo). Pasamos a 1.
+    if (APP_TV && panelCount() > 1) {
+      if (tvPerf.struggles.length >= 4) { tvPerf.struggles = []; fallbackToOne(); }
+      return;
+    }
     if (tvPerf.struggles.length >= 4 && tvPerf.level < QUALITY.length - 1 && now - tvPerf.lastChange > 30_000) {
       tvPerf.struggles = [];
       tvPerf.lastChange = now;
@@ -306,6 +312,23 @@
     if (p) p.yt = d;
   });
 
+  // Qué formatos puede decodificar la tele por hardware (powerEfficient) o solo por software.
+  async function showDecoderCaps() {
+    const box = el('div', { class: 'diag diag-caps', text: 'Probando decodificadores…' });
+    document.body.append(box);
+    const mc = navigator.mediaCapabilities;
+    if (!mc || !mc.decodingInfo) { box.textContent = 'Este WebView no informa decodificadores.'; return; }
+    const CODECS_TEST = [['H.264', 'video/mp4; codecs="avc1.4d401e"'], ['VP9', 'video/webm; codecs="vp09.00.21.08"'], ['AV1', 'video/mp4; codecs="av01.0.04M.08"']];
+    const out = [];
+    for (const [name, contentType] of CODECS_TEST) {
+      try {
+        const r = await mc.decodingInfo({ type: 'media-source', video: { contentType, width: 640, height: 360, bitrate: 800000, framerate: 30 } });
+        out.push(`${name}: ${!r.supported ? 'no' : r.powerEfficient ? 'por HARDWARE' : 'por software'}${r.supported && !r.smooth ? ' (lento)' : ''}`);
+      } catch { out.push(`${name}: ?`); }
+    }
+    box.textContent = `Decodificadores de la tele (360p) → ${out.join(' · ')}`;
+  }
+
   // Diagnóstico en pantalla: qué calidad manda YouTube a cada panel y cuántas pausas tuvo.
   let diagTimer = null;
   function toggleDiag() {
@@ -314,6 +337,7 @@
     clearInterval(diagTimer);
     document.querySelectorAll('.diag').forEach((n) => n.remove());
     if (!on) return;
+    showDecoderCaps();
     const STATES = { '-1': 'sin iniciar', 0: 'terminó', 1: 'reproduciendo', 2: 'PAUSADO', 3: 'cargando', 5: 'en cola' };
     const tick = () => panels.forEach((p) => {
       let box = $('.diag', p.root);
@@ -774,26 +798,60 @@
   }
 
   // Aviso antes de pasar a 4 canales en la app de TV.
-  function warnFour(onYes) {
+  // Ventana de aviso manejable con el control (flechas + OK; Atrás la cierra).
+  function modal(title, paragraphs, buttons) {
     const close = () => { dlg.remove(); document.body.classList.remove('modal-open'); };
-    const yes = el('button', { type: 'button', class: 'btn primary', onclick: () => { close(); onYes(); } }, 'Probar con 4');
-    const no = el('button', { type: 'button', class: 'btn', onclick: () => { close(); panels[0]?.body.focus(); } }, 'Quedarme con 2');
-    const dlg = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'warn4-t' },
+    const btns = buttons.map((b, i) => el('button', {
+      type: 'button', class: i === 0 ? 'btn primary' : 'btn',
+      onclick: () => { close(); if (b.action) b.action(); else panels[0]?.body.focus(); },
+    }, b.label));
+    const dlg = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'modal-t' },
       el('div', { class: 'modal-box' },
-        el('h2', { id: 'warn4-t', text: '¿Ver 4 canales a la vez?' }),
-        el('p', { text: 'Ver 4 videos juntos necesita mucha potencia. Muchas teles tienen un solo decodificador de video, así que con 4 canales los videos se pueden trabar, cortar o quedar congelados.' }),
-        el('p', { text: 'Si pasa, volvé a 2 desde el menú (▲ arriba de todo). Con un Chromecast con Google TV o un Fire TV Stick 4K Max suele andar mejor.' }),
-        el('div', { class: 'modal-actions' }, yes, no)));
+        el('h2', { id: 'modal-t', text: title }),
+        paragraphs.map((t) => el('p', { text: t })),
+        el('div', { class: 'modal-actions' }, btns)));
     dlg.close = close;
     document.body.append(dlg);
     document.body.classList.add('modal-open');
-    yes.focus();
+    btns[0].focus();
+  }
+
+  const DEVICE_TIP = 'Con un Chromecast con Google TV o un Fire TV Stick 4K Max se pueden ver más canales a la vez.';
+
+  function warnFour(onYes) {
+    modal('¿Ver 4 canales a la vez?', [
+      'Ver 4 videos juntos necesita mucha potencia. Muchas teles tienen un solo decodificador de video, así que con 4 canales los videos se pueden trabar, cortar o quedar congelados.',
+      `Si pasa, la app vuelve sola a 1 canal. ${DEVICE_TIP}`,
+    ], [{ label: 'Probar con 4', action: onYes }, { label: 'Cancelar' }]);
+  }
+
+  function warnOnlyOne(n, onYes) {
+    modal(`¿Probar con ${n} canales?`, [
+      'En esta tele, con más de un canal los videos se trabaron y la app pasó a 1.',
+      `Podés probar de nuevo; si se vuelve a trabar, regresa sola a 1. ${DEVICE_TIP}`,
+    ], [{ label: 'Probar igual', action: onYes }, { label: 'Quedarme con 1' }]);
+  }
+
+  // Esta tele no pudo con varios videos juntos: 1 canal y aviso (se recuerda).
+  function fallbackToOne() {
+    store.set('bn.tv.onlyOne', true);
+    state.g = 1;
+    persist();
+    renderGrid();
+    modal('Tu tele puede mostrar un canal a la vez', [
+      'Con más de un canal los videos se trababan y se recargaban, así que pasamos a 1 canal, que en esta tele anda bien.',
+      `Para cambiar de canal: ▲ y OK sobre el nombre. Podés volver a probar con más desde el menú (▲ arriba de todo). ${DEVICE_TIP}`,
+    ], [{ label: 'Entendido' }]);
   }
 
   function setupLayout() {
     const apply = (g) => { state.g = g; persist(); renderGrid(); if (TV) panels[0]?.body.focus(); };
     document.querySelectorAll('.seg').forEach((b) => b.addEventListener('click', () => {
       const g = b.dataset.g === 'd' ? 'd' : Number(b.dataset.g);
+      if (APP_TV && g !== 1 && g !== state.g && store.get('bn.tv.onlyOne', false)) {
+        warnOnlyOne(g === 'd' ? 2 : 4, () => apply(g));
+        return;
+      }
       if (APP_TV && g === 2 && state.g !== 2) { warnFour(() => apply(2)); return; }
       apply(g);
     }));
