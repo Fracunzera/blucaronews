@@ -156,7 +156,7 @@ En `/admin`, en la sección "Feeds RSS", completá medio, ID y URL. Apretá "Pro
 
 Sin configurar nada, cada panel carga el vivo actual del canal y muestra el estado que informa el reproductor (● EN VIVO, ⚠ Señal no disponible, etc.).
 
-Si cargás `YT_API_KEY` (YouTube Data API v3, gratis), el worker consulta cada 5 minutos qué canales están en vivo. Así los paneles de canales sin vivo muestran "○ Sin transmisión en vivo" sin cargar el player. Usa unas 1.000 unidades por día de las 10.000 gratuitas, y no descarga ningún video.
+Si cargás `YT_API_KEY` (YouTube Data API v3, gratis), el worker averigua el **ID del vivo** de cada canal y el panel inserta ese video. Esto hace falta porque el formato genérico `embed/live_stream?channel=…` da error 150 en algunos canales que sí permiten insertar el vivo (pasaba con Canal 26 y Crónica). También muestra "○ Sin transmisión en vivo" en los canales sin vivo y "El medio no permite incrustar este vivo" cuando el dueño lo bloqueó (Telefe Noticias). Los vivos nuevos salen del feed del canal (gratis); los 24 h, que quedan fuera del feed, se buscan con `search.list` (100 unidades) como mucho cada 90 minutos por canal y solo mientras no haya un vivo conocido, con un tope de 7.000 unidades por día de las 10.000 gratuitas. No se descarga ningún video. Si la key tiene restricción por IP, tiene que ser la IPv4 del VPS: los contenedores salen por IPv4.
 
 ## Backup y restore
 
@@ -215,14 +215,14 @@ curl -s http://127.0.0.1:3080/api/health
 
 ## Catálogo inicial (verificado el 11/11/2026)
 
-**10 canales (YouTube).** Para cada uno se verificó el ID con el feed oficial del canal y el oEmbed oficial respondió 200 en sus últimos videos:
-- TN Todo Noticias, C5N, A24, La Nación (LN+) y Crónica TV (noticias)
+**12 canales (YouTube).** Para cada uno se verificó el ID con el feed oficial del canal y que su vivo tenga `embeddable=true` en la API:
+- TN Todo Noticias, C5N, A24, La Nación (LN+), Canal 26 y Crónica TV (noticias)
 - Luzu TV (aire)
-- Urbana Play 104.3 (radio)
+- Radio Mitre y Urbana Play 104.3 (radio)
 - Canal 9 Santa Cruz (Santa Cruz)
 - DW Español y France 24 Español (internacionales)
 
-Se sacaron **Canal 26, Telefe Noticias y Radio Mitre**: sus videos comunes se pueden insertar, pero el vivo da error 150 fuera de YouTube (el medio bloquea la inserción del vivo). Que oEmbed responda 200 en los últimos videos no garantiza que el vivo se pueda insertar: hay que probar el panel en un navegador.
+**Telefe Noticias** no está: su vivo tiene la inserción desactivada (`embeddable=false`). Canal 26, Radio Mitre y Crónica daban error 150 con el embed genérico `live_stream?channel=` (Canal 26 tiene dos vivos a la vez); con `YT_API_KEY` el panel usa el ID del vivo y funcionan.
 
 **15 feeds RSS:** Infobae, Noticias Argentinas, La Nación, Página/12, Perfil, Ámbito, El Cronista, iProfesional, Diario Norte, LM Neuquén, MinutoUno, TiempoSur (Santa Cruz), Río Negro, El Economista y elDiarioAR.
 

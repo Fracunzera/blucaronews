@@ -107,7 +107,7 @@ app.get('/api/channels', () => {
     categories: CATEGORIES,
     channels: getChannels().map(({ id, name, category, type, source }) => ({ id, name, category, type, source })),
     // Solo si hay YT_API_KEY: { [channelId]: { live, videoId, embeddable } }
-    youtube: live ? { updatedAt: live.updatedAt, status: live.value } : null,
+    youtube: live && live.value?.status ? { updatedAt: live.updatedAt, status: live.value.status } : null,
   };
 });
 
