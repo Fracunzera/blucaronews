@@ -11,3 +11,10 @@ RUN mkdir -p $ANDROID_HOME/cmdline-tools \
  && rm /tmp/clt.zip \
  && yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null \
  && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" >/dev/null
+# androidx.webkit (solo classes.jar): WebViewCompat.addDocumentStartJavaScript para el
+# script de códec/diagnóstico dentro del reproductor oficial de YouTube. Checksum fijo.
+RUN mkdir -p /opt/libs \
+ && wget -q https://dl.google.com/android/maven2/androidx/webkit/webkit/1.12.1/webkit-1.12.1.aar -O /tmp/webkit.aar \
+ && echo "18a0a51ad129e0c8563f031d46c8a7e61169f56ae84e562a0d75686941262111  /tmp/webkit.aar" | sha256sum -c - \
+ && unzip -q -p /tmp/webkit.aar classes.jar > /opt/libs/androidx-webkit.jar \
+ && rm /tmp/webkit.aar

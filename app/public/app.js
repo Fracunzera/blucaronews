@@ -12,6 +12,9 @@
   // (?tv=0 lo apaga). Se recuerda en el navegador.
   const TV_UA = /SmartTV|SMART-TV|Tizen|Web0S|WebOS|NetCast|HbbTV|BRAVIA|\bAFT[A-Z]|Android TV|GoogleTV|CrKey|Roku|VIDAA|TV Safari|AppleTV|Viera|PhilipsTV|Opera TV|BlucaroNewsTV/i;
   const APP_TV = /BlucaroNewsTV/.test(navigator.userAgent);
+  // La app de TV (desde la versión con BNInject) corre un script dentro del reproductor de
+  // YouTube que puede pedirle H.264 (lo más liviano para la tele) y medir cuadros perdidos.
+  const INJECT = /BNInject\/1/.test(navigator.userAgent);
 
   const store = {
     get(k, def) {
@@ -48,6 +51,7 @@
     max: Math.min(4, Math.max(1, Number(store.get('bn.tv.videos.v2', 4)) || 4)),
     level: Math.min(QUALITY.length - 1, Math.max(0, Number(store.get('bn.tv.quality', 0)) || 0)),
     pauses: [],
+    codec: store.get('bn.tv.codec', 'h264') === 'auto' ? 'auto' : 'h264',
   };
 
   const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k != null));
@@ -320,6 +324,15 @@
     if (b) b.textContent = `⚙ Calidad: ${['normal', 'baja', 'mínima'][tvPerf.level]}`;
   }
 
+  // Datos del script de la app de TV dentro de cada reproductor (códec, resolución, cuadros).
+  window.addEventListener('message', (e) => {
+    if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin)) return;
+    const d = e.data;
+    if (!d || typeof d !== 'object' || d.bn !== 'diag') return;
+    const p = panels.find((q) => { const f = $('iframe', q.body); return f && f.contentWindow === e.source; });
+    if (p) p.yt = d;
+  });
+
   // Diagnóstico en pantalla: qué calidad manda YouTube a cada panel y cuántas pausas tuvo.
   let diagTimer = null;
   function toggleDiag() {
@@ -336,11 +349,18 @@
       try { q = p.player.getPlaybackQuality(); st = STATES[p.player.getPlayerState()] || p.player.getPlayerState(); fr = (p.player.getVideoLoadedFraction() * 100).toFixed(0) + '%'; } catch {}
       const f = $('iframe', p.body);
       const px = f ? `${Math.round(f.offsetWidth * (window.devicePixelRatio || 1))}px` : '—';
-      box.textContent = `${p.mode || '—'} · ${st} · calidad ${q} · player ${px} · pausas ${p.pauseCount || 0}`;
+      let extra = '';
+      if (p.yt) {
+        const y = p.yt;
+        const lost = y.dTotal > 0 ? Math.round((100 * Math.max(0, y.dDropped)) / y.dTotal) : 0;
+        extra = `\n${y.codec || '?'} ${y.w}x${y.h} · cuadros perdidos ${lost}% (total ${y.total > 0 ? Math.round((100 * y.dropped) / y.total) : 0}%)`;
+      }
+      box.textContent = `${st} · calidad ${q} · player ${px} · pausas ${p.pauseCount || 0}${extra}`;
     });
     tick();
     diagTimer = setInterval(tick, 2000);
-    toast(`Diagnóstico: pantalla ${screen.width}x${screen.height} · ventana ${innerWidth}x${innerHeight} · densidad ${devicePixelRatio} · calidad ${['normal', 'baja', 'mínima'][tvPerf.level]}`);
+    const chrome = (/Chrome\/(\d+)/.exec(navigator.userAgent) || [])[1] || '?';
+    toast(`Diagnóstico: WebView ${chrome} · ventana ${innerWidth}x${innerHeight} · densidad ${devicePixelRatio} · calidad ${['normal', 'baja', 'mínima'][tvPerf.level]}${INJECT ? ` · formato ${tvPerf.codec}` : ' · app vieja (sin medición de cuadros)'}`);
   }
 
   function syncVideosBtn() {
@@ -369,6 +389,7 @@
       autoplay: '1', mute: '1', playsinline: '1', rel: '0', enablejsapi: '1', origin: location.origin,
     });
     if (TV) { params.set('controls', '0'); params.set('disablekb', '1'); params.set('fs', '0'); params.set('iv_load_policy', '3'); }
+    if (INJECT) params.set('bn_codec', tvPerf.codec); // lo lee el script de la app de TV
     const src = live && live.videoId
       ? `https://www.youtube.com/embed/${encodeURIComponent(live.videoId)}?${params}`
       : `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(ch.source)}&${params}`;
@@ -884,6 +905,19 @@
         syncQualityBtn();
         panels.forEach(applyLite);
         toast(`Calidad ${QUALITY[tvPerf.level].label}`);
+      });
+    }
+    const cb = $('#tv-codec');
+    if (cb && INJECT) {
+      cb.hidden = false;
+      const sync = () => { cb.textContent = `🎛 Formato: ${tvPerf.codec === 'h264' ? 'H.264' : 'automático'}`; };
+      sync();
+      cb.addEventListener('click', () => {
+        tvPerf.codec = tvPerf.codec === 'h264' ? 'auto' : 'h264';
+        store.set('bn.tv.codec', tvPerf.codec);
+        sync();
+        renderGrid();
+        toast(tvPerf.codec === 'h264' ? 'Formato H.264: el más liviano para la tele.' : 'Formato automático: YouTube elige (VP9/AV1/H.264).');
       });
     }
     const db = $('#tv-diag');

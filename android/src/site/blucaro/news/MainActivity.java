@@ -17,6 +17,14 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.HashSet;
+
 /**
  * Blucaro News para Android TV: un WebView a pantalla completa con la página en modo TV.
  * Los videos los reproduce el player oficial de YouTube dentro de la página; la app no
@@ -52,7 +60,10 @@ public class MainActivity extends Activity {
         s.setUseWideViewPort(true);
         s.setLoadWithOverviewMode(true);
         s.setTextZoom(100);
-        s.setUserAgentString(s.getUserAgentString() + " BlucaroNewsTV/" + versionName());
+        // Script dentro del reproductor oficial de YouTube: elegir H.264 (lo más liviano para
+        // la tele) y medir cuadros perdidos. Si el WebView de la tele no lo soporta, sigue sin él.
+        boolean inject = injectYoutubeScript();
+        s.setUserAgentString(s.getUserAgentString() + " BlucaroNewsTV/" + versionName() + (inject ? " BNInject/1" : ""));
 
         web.setWebViewClient(new Client());
         web.setWebChromeClient(chrome);
@@ -62,6 +73,23 @@ public class MainActivity extends Activity {
         if (state != null) web.restoreState(state);
         else web.loadUrl(HOME);
         web.requestFocus();
+    }
+
+    private boolean injectYoutubeScript() {
+        try {
+            if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false;
+            InputStream in = getResources().openRawResource(R.raw.yt_inject);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            in.close();
+            WebViewCompat.addDocumentStartJavaScript(web, out.toString("UTF-8"),
+                new HashSet<String>(Arrays.asList("https://www.youtube.com", "https://www.youtube-nocookie.com")));
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private String versionName() {

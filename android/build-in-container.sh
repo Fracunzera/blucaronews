@@ -12,9 +12,14 @@ rm -rf "$OUT" && mkdir -p "$OUT/gen" "$OUT/classes" "$OUT/dex"
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
   --java "$OUT/gen" "$OUT/res.zip"
 
-javac -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$AJ" -d "$OUT/classes" \
+LIBS=/opt/libs/androidx-webkit.jar
+javac -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$AJ" -classpath "$LIBS" -d "$OUT/classes" \
   $(find /src/src "$OUT/gen" -name '*.java')
-"$BT/d8" --release --min-api 21 --lib "$AJ" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
+# androidx.webkit va adentro del dex. Sus referencias a androidx.core (WebViewAssetLoader,
+# que no usamos) y a anotaciones quedan como avisos de d8, sin efecto en ejecución.
+"$BT/d8" --release --min-api 21 --lib "$AJ" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class') "$LIBS" 2>&1 \
+  | grep -v -E "^Warning|Missing class|androidx/(core|annotation)" || true
+test -f "$OUT/dex/classes.dex"
 
 cp "$OUT/base.apk" "$OUT/unsigned.apk"
 (cd "$OUT/dex" && zip -q -j "$OUT/unsigned.apk" classes.dex)
