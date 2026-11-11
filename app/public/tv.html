@@ -3,85 +3,117 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>App para TV · {{SITE}}</title>
-  <meta name="description" content="Cómo ver {{SITE}} en la tele: app para Android TV, Google TV y Fire TV, o desde el navegador de cualquier Smart TV.">
+  <title>Ver en la tele · {{SITE}}</title>
+  <meta name="description" content="Cómo ver {{SITE}} en la tele, paso a paso: instalar la app con Downloader en Google TV, Android TV y Fire TV.">
   <meta name="color-scheme" content="dark light">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/page.css">
   <script src="/theme.js"></script>
 </head>
 <body class="page">
-  <main class="doc">
-    <p><a href="/">← Volver al monitor</a></p>
-    <h1>📺 {{SITE}} en la tele</h1>
-    <p>Hay dos formas de verlo. Las dos son gratis y ninguna pasa por una tienda de apps.</p>
+  <main class="doc tvdoc">
+    <p><a href="/">← Volver</a></p>
+    <h1>📺 Ver {{SITE}} en la tele</h1>
+    <p class="lead">Se instala una app en la tele. Es gratis, lleva unos 5 minutos y se hace <strong>una sola vez</strong>. Necesitás la tele conectada a Internet y el control remoto.</p>
 
-    <div class="card download">
-      <h2>App para Android TV, Google TV y Fire TV</h2>
-      <p><a class="btn primary big" href="/tv.apk" download>⬇ Descargar la app (APK)</a></p>
-      <p class="hint">{{APK_INFO}}</p>
-      <p class="hint">Desde la tele, la dirección corta es <strong class="code">{{DOMAIN}}/tv.apk</strong></p>
+    <div class="callout">
+      <p><strong>Funciona en:</strong> Google TV, Android TV y Fire TV. Es la mayoría de las teles nuevas (TCL, Philips, Sony, Hisense, Noblex, BGH, Xiaomi…) y también los aparatitos que se enchufan a la tele: <strong>Chromecast con Google TV</strong>, <strong>Fire TV Stick</strong>, TV Box Android.</p>
+      <p><strong>¿Samsung o LG?</strong> Mirá <a href="#samsung-lg">más abajo</a>.</p>
     </div>
 
-    <h2>Instalarla en Android TV o Google TV (Chromecast, TCL, Philips, Sony, etc.)</h2>
-    <ol>
-      <li>En la tele, abrí <strong>Google Play</strong>, buscá <strong>Downloader</strong> (el de AFTVnews, ícono naranja) e instalalo.</li>
-      <li>Dale permiso a Downloader para instalar apps:
-        <ul>
-          <li><strong>Google TV:</strong> primero activá el modo desarrollador. Andá a <em>Configuración → Sistema → Acerca de</em> y apretá OK <strong>7 veces</strong> sobre <em>Compilación del SO de Android TV</em>, hasta que diga "Ahora sos desarrollador". Después andá a <em>Configuración → Apps → Seguridad y restricciones → Fuentes desconocidas</em> y activá <strong>Downloader</strong>.</li>
-          <li><strong>Android TV (versiones anteriores):</strong> <em>Configuración → Preferencias del dispositivo → Seguridad y restricciones → Fuentes desconocidas</em> y activá <strong>Downloader</strong>.</li>
-        </ul>
+    <h2 class="step-title">Paso a paso</h2>
+
+    <ol class="steps">
+      <li>
+        <h3>Instalá la app “Downloader”</h3>
+        <p>En la tele, abrí la tienda (<strong>Google Play</strong>, o <strong>Buscar 🔍</strong> en Fire TV), escribí <strong>Downloader</strong> e instalá la que tiene el <strong>ícono naranja con una flecha blanca</strong> (es de <em>AFTVnews</em>).</p>
+        <p class="hint">Downloader sirve para bajar archivos en la tele. Es gratuita y muy usada.</p>
       </li>
-      <li>Abrí Downloader, escribí <strong class="code">{{DOMAIN}}/tv.apk</strong> en la barra de dirección y apretá <strong>Ir</strong>.</li>
-      <li>Cuando termine la descarga, elegí <strong>Instalar</strong>. Al final, Downloader te ofrece borrar el archivo descargado: podés decirle que sí.</li>
-      <li>Listo: <strong>Blucaro News</strong> aparece en la fila de apps del inicio (si no la ves, buscala en <em>Apps → Ver todas</em>).</li>
+
+      <li>
+        <h3>Dale permiso a Downloader para instalar apps</h3>
+        <p>La tele, por seguridad, solo instala apps de su tienda. Hay que avisarle que Downloader es de confianza. Elegí tu caso:</p>
+
+        <details class="tvopt" open>
+          <summary><span class="tvopt-name">Google TV</span><span class="tvopt-ex">En el inicio hay pestañas como <em>Para vos · Películas · Series</em></span></summary>
+          <ol type="a">
+            <li>Andá a <strong>Configuración</strong> (la ruedita ⚙, arriba a la derecha) → <strong>Sistema</strong> → <strong>Acerca de</strong>.</li>
+            <li>Bajá hasta <strong>Compilación del SO de Android TV</strong> y apretá <strong>OK 7 veces seguidas</strong>, hasta que aparezca <em>“Ahora sos desarrollador”</em>. Suena raro, pero es el paso que habilita la opción. No cambia nada más de la tele.</li>
+            <li>Volvé a <strong>Configuración</strong> → <strong>Apps</strong> → <strong>Seguridad y restricciones</strong> → <strong>Fuentes desconocidas</strong> y activá <strong>Downloader</strong>.</li>
+          </ol>
+        </details>
+
+        <details class="tvopt">
+          <summary><span class="tvopt-name">Android TV</span><span class="tvopt-ex">Filas de apps con Google Play, sin las pestañas de Google TV</span></summary>
+          <ol type="a">
+            <li><strong>Configuración</strong> → <strong>Preferencias del dispositivo</strong> → <strong>Seguridad y restricciones</strong> → <strong>Fuentes desconocidas</strong> → activá <strong>Downloader</strong>.</li>
+          </ol>
+        </details>
+
+        <details class="tvopt">
+          <summary><span class="tvopt-name">Fire TV (Amazon)</span><span class="tvopt-ex">El control tiene botón de Alexa</span></summary>
+          <ol type="a">
+            <li><strong>Configuración</strong> ⚙ → <strong>Mi Fire TV</strong> → <strong>Opciones para desarrolladores</strong> → <strong>Instalar apps desconocidas</strong> → activá <strong>Downloader</strong>.</li>
+            <li>Si no aparece <em>Opciones para desarrolladores</em>: entrá a <strong>Mi Fire TV</strong> → <strong>Acerca de</strong>, apretá <strong>OK 7 veces</strong> sobre el nombre del aparato (por ejemplo <em>Fire TV Stick</em>) y volvé al punto anterior.</li>
+          </ol>
+        </details>
+      </li>
+
+      <li>
+        <h3>Bajá la app de {{SITE}}</h3>
+        <p>Abrí <strong>Downloader</strong> (si pide permisos, aceptá). En el recuadro que dice <em>“Enter a URL or Search Term”</em> escribí exactamente:</p>
+        <p class="bigcode">{{DOMAIN}}/tv.apk</p>
+        <p>y apretá <strong>Go</strong>.</p>
+      </li>
+
+      <li>
+        <h3>Instalala</h3>
+        <p>Cuando termina de bajar aparece una pantalla con el nombre <strong>{{SITE}}</strong>. Apretá <strong>Instalar</strong>.</p>
+        <p class="tip">⚠ Si aparece un cartel de <strong>Play Protect</strong> que dice que la app es desconocida, es normal porque no viene de la tienda: elegí <strong>Más detalles → Instalar de todas formas</strong>.</p>
+        <p>Al final Downloader pregunta si querés borrar el archivo: apretá <strong>Delete</strong> (ya no hace falta).</p>
+      </li>
+
+      <li>
+        <h3>¡Listo! Abrila</h3>
+        <p>{{SITE}} aparece en el inicio, en la fila de <strong>Apps</strong>. Si no la ves, entrá a <strong>Apps → Ver todas</strong>. Para tenerla a mano, mantené apretado OK sobre el ícono y elegí <strong>Agregar a favoritos</strong>.</p>
+      </li>
     </ol>
 
-    <h2>Instalarla en Fire TV (Amazon)</h2>
-    <ol>
-      <li>Buscá <strong>Downloader</strong> en la tienda de Amazon de la tele e instalalo.</li>
-      <li>Andá a <em>Configuración → Mi Fire TV → Opciones para desarrolladores → Instalar apps desconocidas</em> y activá <strong>Downloader</strong>. Si no aparece <em>Opciones para desarrolladores</em>, entrá a <em>Mi Fire TV → Acerca de</em> y apretá OK <strong>7 veces</strong> sobre el nombre del dispositivo.</li>
-      <li>Seguí desde el paso 3 de Android TV.</li>
-    </ol>
-
-    <h2>Con un pendrive (sin Downloader)</h2>
-    <ol>
-      <li>Descargá el APK en la compu con el botón de arriba y copialo a un pendrive.</li>
-      <li>Conectá el pendrive a la tele y abrilo con un explorador de archivos (por ejemplo <strong>File Commander</strong> o <strong>X-plore</strong>, gratis en Google Play).</li>
-      <li>Elegí <em>blucaronews-tv.apk</em> → <strong>Instalar</strong>. La primera vez te va a pedir permiso para instalar apps desde ese explorador: activalo y volvé.</li>
-    </ol>
-
-    <h2>Samsung, LG y otras Smart TV: desde el navegador</h2>
-    <p>Abrí el navegador de la tele (<em>Internet</em> en Samsung, <em>Navegador web</em> en LG) y entrá a <strong class="code">{{DOMAIN}}</strong>. La página detecta que es una tele y se pone en modo TV. Si no lo detecta, entrá a <strong class="code">{{DOMAIN}}/?tv=1</strong>. Para volver al modo normal: <strong class="code">{{DOMAIN}}/?tv=0</strong>.</p>
-    <p class="hint">Guardala en favoritos para no tener que escribirla cada vez.</p>
-
-    <h2>Cómo se usa con el control remoto</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Botón</th><th>Qué hace</th></tr></thead>
-        <tbody>
-          <tr><td>◀ ▲ ▶ ▼ (flechas)</td><td>Moverse entre los paneles, los selectores de canal y los botones de arriba.</td></tr>
-          <tr><td><strong>OK</strong> sobre un panel</td><td><strong>Activar o silenciar el sonido</strong> de ese canal. Todos arrancan silenciados; podés tener más de uno con sonido.</td></tr>
-          <tr><td><strong>OK</strong> sobre el nombre del canal</td><td>Abre la lista para <strong>cambiar de canal</strong> en ese panel.</td></tr>
-          <tr><td>Volumen de la tele</td><td>Sube y baja el volumen como siempre.</td></tr>
-          <tr><td>1 · 4 · 9 (arriba)</td><td>Cuántos canales ver a la vez.</td></tr>
-          <tr><td>Titulares (arriba)</td><td>Muestra u oculta la columna de titulares. Parado en la columna, ▲ ▼ la recorren.</td></tr>
-          <tr><td>Atrás</td><td>Vuelve a los paneles; si ya estás en un panel, cierra la app.</td></tr>
-        </tbody>
-      </table>
+    <h2 class="step-title">Cómo se usa con el control</h2>
+    <div class="remote">
+      <div class="rk"><span class="key">◀ ▲ ▶ ▼</span><span>Moverse entre los canales y los botones</span></div>
+      <div class="rk"><span class="key">OK</span><span>Sobre un canal: <strong>prende o apaga el sonido</strong> de ese canal. Todos arrancan sin sonido.</span></div>
+      <div class="rk"><span class="key">▲ y OK</span><span>Sobre el nombre del canal: <strong>cambiar de canal</strong></span></div>
+      <div class="rk"><span class="key">Vol + −</span><span>El volumen de siempre de la tele</span></div>
+      <div class="rk"><span class="key">1 · 4 · 9</span><span>Arriba de todo: cuántos canales ver a la vez</span></div>
+      <div class="rk"><span class="key">Atrás</span><span>Vuelve a los canales. Si ya estás en uno, cierra la app.</span></div>
     </div>
 
-    <h2>Preguntas frecuentes</h2>
+    <h2 class="step-title" id="samsung-lg">¿Samsung, LG u otra tele sin Google Play?</h2>
+    <p>Esas teles no permiten instalar la app. Tenés dos opciones:</p>
     <ul>
-      <li><strong>¿Es seguro?</strong> La app es solo una ventana a {{DOMAIN}}: no pide permisos más allá de Internet, no lee nada de la tele y no tiene publicidad. Los videos llegan directo de YouTube con el reproductor oficial de cada medio.</li>
-      <li><strong>Un panel dice "Sin vivo ahora".</strong> Ese canal no está transmitiendo en este momento. Cambialo por otro o probá más tarde.</li>
-      <li><strong>¿Cómo la actualizo?</strong> Casi todo se actualiza solo (la app carga la página). Si alguna vez hay un APK nuevo, repetí la instalación por encima: no hace falta desinstalar.</li>
-      <li><strong>¿Cómo la desinstalo?</strong> <em>Configuración → Apps → Blucaro News → Desinstalar</em>.</li>
+      <li><strong>La recomendada:</strong> enchufarle un <strong>Chromecast con Google TV</strong> o un <strong>Fire TV Stick</strong> (se consiguen en cualquier casa de electrónica) y seguir los pasos de arriba. Además te sirve para Netflix, YouTube, etc.</li>
+      <li><strong>Probar con el navegador de la tele</strong> (<em>Internet</em> en Samsung, <em>Navegador web</em> en LG) entrando a <span class="code">{{DOMAIN}}/?tv=1</span>. Ojo: los navegadores de muchas teles son viejos o lentos, así que puede andar mal o no cargar los videos.</li>
     </ul>
 
-    <p class="hint">{{SITE}} no retransmite señales: cada canal se ve con el reproductor oficial del medio. Ver <a href="/terminos">términos</a>.</p>
+    <h2 class="step-title">Si algo no sale</h2>
+    <details class="faq"><summary>Downloader da error o no baja nada</summary><p>Revisá que escribiste bien <span class="code">{{DOMAIN}}/tv.apk</span>: sin espacios y con el punto antes de <em>apk</em>. Fijate también que la tele tenga Internet (por ejemplo, que YouTube ande).</p></details>
+    <details class="faq"><summary>No aparece “Fuentes desconocidas” o “Instalar apps desconocidas”</summary><p>En Google TV y Fire TV primero hay que apretar <strong>OK 7 veces</strong> en <em>Acerca de</em> (paso 2). Sin eso, la opción no aparece.</p></details>
+    <details class="faq"><summary>Dice “App no instalada”</summary><p>Si tenías una versión vieja, desinstalala (<strong>Configuración → Apps → {{SITE}} → Desinstalar</strong>) y repetí los pasos 3 y 4.</p></details>
+    <details class="faq"><summary>No se escucha nada</summary><p>Todos los canales arrancan sin sonido. Parate sobre el que querés escuchar y apretá <strong>OK</strong>: el recuadro se pone rojo y dice <em>Con sonido</em>.</p></details>
+    <details class="faq"><summary>Un canal dice “Sin vivo ahora”</summary><p>Ese canal no está transmitiendo en este momento. Cambialo por otro o probá más tarde.</p></details>
+    <details class="faq"><summary>¿Es seguro? ¿Tiene publicidad?</summary><p>La app solo abre {{DOMAIN}} en pantalla completa. No pide permisos aparte de Internet, no lee nada de la tele y no tiene publicidad. Los videos son los reproductores oficiales de cada canal en YouTube.</p></details>
+    <details class="faq"><summary>¿Cómo la actualizo o la borro?</summary><p>Casi todo se actualiza solo. Si alguna vez hay que actualizar la app, repetí los pasos 3 y 4: se instala encima sin borrar nada. Para borrarla: <strong>Configuración → Apps → {{SITE}} → Desinstalar</strong>.</p></details>
+
+    <div class="card download">
+      <h2>Sin Downloader: con un pendrive</h2>
+      <p><a class="btn primary big" href="/tv.apk" download>⬇ Descargar la app (archivo para la tele)</a></p>
+      <p class="hint">{{APK_INFO}}</p>
+      <p class="hint">Bajala en la compu, copiala a un pendrive, conectalo a la tele y abrí el archivo <em>blucaronews-tv.apk</em> con un explorador de archivos (por ejemplo <strong>File Commander</strong>, gratis en Google Play). Hace falta el permiso del paso 2, pero para el explorador en vez de Downloader.</p>
+    </div>
+
+    <p class="hint">{{SITE}} no retransmite señales: cada canal se ve con el reproductor oficial del medio. <a href="/terminos">Términos</a>.</p>
   </main>
 </body>
 </html>

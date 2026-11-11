@@ -682,8 +682,7 @@
     window.addEventListener('blur', () => setTimeout(() => {
       if (document.activeElement && document.activeElement.tagName === 'IFRAME') panels[0]?.body.focus();
     }, 0));
-    const tvLink = $('#tv-link');
-    if (tvLink) tvLink.hidden = true;
+    for (const id of ['#tv-link', '#tv-btn']) { const n = $(id); if (n) n.hidden = true; }
   }
 
   // Pantalla siempre encendida en la tele o con la app instalada (si el navegador deja).
@@ -703,11 +702,14 @@
     const btn = $('#install');
     if (!btn || TV) return;
     let deferred = null;
+    // Solo en el celular: en la compu "instalar" crea un acceso en el escritorio y confunde
+    // (la gente lo toma por la app de la tele, que está en /tv).
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferred = e;
-      btn.hidden = false;
+      btn.hidden = !singleColumn();
     });
+    MOBILE.addEventListener('change', () => { btn.hidden = !deferred || !singleColumn(); });
     btn.addEventListener('click', async () => {
       if (!deferred) return;
       deferred.prompt();
