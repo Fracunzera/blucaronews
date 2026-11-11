@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es-AR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin · {{SITE}}</title>
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/page.css">
+  <script src="/theme.js"></script>
+  <script src="/admin.js" defer></script>
+</head>
+<body class="page">
+  <section id="login-view" class="card login" hidden>
+    <h1>Admin · {{SITE}}</h1>
+    <form id="login-form" class="form">
+      <label class="wide">Usuario <input name="user" autocomplete="username" required></label>
+      <label class="wide">Contraseña <input name="password" type="password" autocomplete="current-password" required></label>
+      <div class="form-actions"><button class="btn primary" type="submit">Entrar</button></div>
+    </form>
+    <p id="login-msg" class="msg err" role="alert"></p>
+  </section>
+
+  <main id="admin-view" class="admin" hidden>
+    <header>
+      <h1>Admin · {{SITE}}</h1>
+      <a class="btn" href="/">Ver el monitor</a>
+      <button id="logout" class="btn" type="button">Salir</button>
+    </header>
+
+    <section class="card" aria-labelledby="ch-title">
+      <h2 id="ch-title">Canales</h2>
+      <p class="hint">Solo embeds oficiales y públicos. Al guardar un canal de YouTube o un iframe, el servidor verifica que el medio permita insertarlo; si no lo permite, no se agrega. Nada de eventos deportivos con derechos exclusivos.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">Orden</th><th scope="col">Nombre</th><th scope="col">Categoría</th><th scope="col">Tipo</th><th scope="col">Fuente</th><th scope="col">Verificado</th><th scope="col">Acciones</th></tr></thead>
+          <tbody id="ch-rows"></tbody>
+        </table>
+      </div>
+
+      <h3 id="ch-form-title">Agregar canal</h3>
+      <form id="ch-form" class="form" novalidate>
+        <input type="hidden" name="originalId">
+        <label>ID (para la URL) <input name="id" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="ej: c5n"></label>
+        <label>Nombre visible <input name="name" required maxlength="60"></label>
+        <label>Categoría <select name="category" required></select></label>
+        <label>Tipo <select name="type" required></select></label>
+        <label class="wide">Fuente <input name="source" required placeholder="YouTube: ID de canal UC… · Twitch: usuario · iframe/audio: URL https oficial"></label>
+        <div class="form-actions">
+          <button class="btn" type="button" id="ch-check">Verificar embed</button>
+          <button class="btn primary" type="submit">Guardar canal</button>
+          <button class="btn" type="reset" id="ch-cancel">Cancelar</button>
+        </div>
+      </form>
+      <p id="ch-msg" class="msg" role="status"></p>
+    </section>
+
+    <section class="card" aria-labelledby="fd-title">
+      <h2 id="fd-title">Feeds RSS</h2>
+      <p class="hint">Se leen cada 1–2 minutos. Solo se guarda título, medio, link, fecha y la bajada del RSS recortada; se borra todo a las 48 h.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">Medio</th><th scope="col">URL</th><th scope="col">Estado</th><th scope="col">Activo</th><th scope="col">Acciones</th></tr></thead>
+          <tbody id="fd-rows"></tbody>
+        </table>
+      </div>
+
+      <h3 id="fd-form-title">Agregar feed</h3>
+      <form id="fd-form" class="form" novalidate>
+        <input type="hidden" name="originalId">
+        <label>ID <input name="id" required pattern="[a-z0-9][a-z0-9-]{0,39}" placeholder="ej: clarin"></label>
+        <label>Medio (nombre visible) <input name="name" required maxlength="60"></label>
+        <label class="wide">URL del feed <input name="url" required type="url" placeholder="https://…/rss"></label>
+        <label><span><input type="checkbox" name="enabled" checked> Activo</span></label>
+        <div class="form-actions">
+          <button class="btn" type="button" id="fd-check">Probar feed</button>
+          <button class="btn primary" type="submit">Guardar feed</button>
+          <button class="btn" type="reset" id="fd-cancel">Cancelar</button>
+        </div>
+      </form>
+      <p id="fd-msg" class="msg" role="status"></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,74 @@
+# Blucaro News — monitor de medios.
+# Servicios: caddy (HTTPS automático, 80/443 públicos), app (web, 3000 interno),
+# worker (RSS + dólar + clima, sin puertos). SQLite vive en el volumen "data".
+name: blucaronews
+
+x-app: &app-base
+  image: blucaronews-app:latest
+  env_file: .env
+  volumes:
+    - data:/data
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options: { max-size: "5m", max-file: "3" }
+
+services:
+  app:
+    <<: *app-base
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    command: ["node", "src/server.js"]
+    expose: ["3000"]
+    # Solo localhost: para chequeos y por si el VPS ya tiene otro proxy (ver README).
+    ports:
+      - "127.0.0.1:${APP_LOCAL_PORT:-3080}:3000"
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    <<: *app-base
+    command: ["node", "src/worker.js"]
+    mem_limit: 160m
+    depends_on:
+      app:
+        condition: service_started
+
+  caddy:
+    image: caddy:2.10-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?Falta DOMAIN en .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 96m
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

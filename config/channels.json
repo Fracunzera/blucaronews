@@ -1,0 +1,15 @@
+{
+  "_doc": "Catálogo de señales. Solo embeds oficiales y públicos. Tipos: youtube (source = ID de canal UC...), twitch (source = usuario), iframe (source = URL https del player embebible oficial), audio (source = URL https del stream que la propia radio publica; el navegador la reproduce directo, nunca pasa por este servidor). Categorías: noticias, aire, radio, economia, provinciales, santa-cruz, deportes, internacionales.",
+  "channels": [
+    { "id": "tn",        "name": "TN Todo Noticias",   "category": "noticias",        "type": "youtube", "source": "UCj6PcyLvpnIRT_2W_mwa9Aw", "verified": "2026-11-11" },
+    { "id": "c5n",       "name": "C5N",                "category": "noticias",        "type": "youtube", "source": "UCFgk2Q2mVO1BklRQhSv6p0w", "verified": "2026-11-11" },
+    { "id": "a24",       "name": "A24",                "category": "noticias",        "type": "youtube", "source": "UCR9120YBAqMfntqgRTKmkjQ", "verified": "2026-11-11" },
+    { "id": "lanacion",  "name": "La Nación (LN+)",    "category": "noticias",        "type": "youtube", "source": "UCba3hpU7EFBSk817y9qZkiA", "verified": "2026-11-11" },
+    { "id": "canal26",   "name": "Canal 26",           "category": "noticias",        "type": "youtube", "source": "UCrpMfcQNog595v5gAS-oUsQ", "verified": "2026-11-11" },
+    { "id": "telefenoticias", "name": "Telefe Noticias", "category": "aire",          "type": "youtube", "source": "UChxGASjdNEYHhVKpl667Huw", "verified": "2026-11-11" },
+    { "id": "mitre",     "name": "Radio Mitre",        "category": "radio",           "type": "youtube", "source": "UCYvINPByAdCcpA0sWrF3I_w", "verified": "2026-11-11" },
+    { "id": "urbana",    "name": "Urbana Play 104.3",  "category": "radio",           "type": "youtube", "source": "UCC1kfsMJko54AqxtcFECt-A", "verified": "2026-11-11" },
+    { "id": "canal9sc",  "name": "Canal 9 Santa Cruz", "category": "santa-cruz",      "type": "youtube", "source": "UCjS0RGNkADweD51lNhpq6fw", "verified": "2026-11-11" },
+    { "id": "dw",        "name": "DW Español",         "category": "internacionales", "type": "youtube", "source": "UCT4Jg8h03dD0iN3Pb5L0PMA", "verified": "2026-11-11" }
+  ]
+}

@@ -1,0 +1,36 @@
+/* Páginas de texto (términos) y panel admin. */
+body.page { display: block; height: auto; min-height: 100dvh; overflow: auto; }
+.doc { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; font-size: 15px; line-height: 1.6; }
+.doc h1 { font-size: 24px; line-height: 1.25; }
+.doc h2 { font-size: 17px; margin-top: 28px; }
+.doc li { margin: 6px 0; }
+
+.admin { max-width: 1200px; margin: 0 auto; padding: 16px 16px 64px; }
+.admin header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.admin header h1 { margin: 0 auto 0 0; font-size: 20px; }
+.card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; }
+.card h2 { margin: 0 0 10px; font-size: 16px; }
+.login { max-width: 360px; margin: 10vh auto; }
+.form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; }
+.form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.form .wide { grid-column: 1 / -1; }
+.form input, .form select {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-height: 34px; color: var(--text);
+}
+.form-actions { display: flex; gap: 8px; flex-wrap: wrap; grid-column: 1 / -1; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.danger { border-color: var(--down); color: var(--down); }
+.msg { margin: 8px 0 0; font-size: 13px; }
+.msg.ok { color: var(--ok); }
+.msg.err { color: var(--down); }
+.msg:empty { display: none; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.src { font-family: var(--mono); font-size: 12px; word-break: break-all; max-width: 360px; }
+td.actions { white-space: nowrap; }
+td.actions .btn { min-height: 28px; padding: 2px 8px; }
+.st-ok { color: var(--ok); }
+.st-err { color: var(--warn); }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }

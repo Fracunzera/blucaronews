@@ -1,0 +1,23 @@
+# HTTPS automático (Let's Encrypt / ZeroSSL) para el dominio definido en .env (DOMAIN).
+# Para recibir avisos de vencimiento de certificados, descomentá y poné tu mail:
+# {
+# 	email tu-mail@ejemplo.com
+# }
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# El puerto 3000 de "app" solo existe en la red interna de Docker.
+	reverse_proxy app:3000
+
+	log {
+		output stdout
+		format console
+		level WARN
+	}
+}

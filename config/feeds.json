@@ -1,0 +1,20 @@
+{
+  "_doc": "Feeds RSS/Atom de titulares. Solo se guarda título, medio, link, fecha y como mucho la bajada del RSS (recortada). Nunca el texto completo.",
+  "feeds": [
+    { "id": "infobae",       "name": "Infobae",          "url": "https://www.infobae.com/arc/outboundfeeds/rss/", "enabled": true },
+    { "id": "noticiasarg",   "name": "Noticias Argentinas", "url": "https://noticiasargentinas.com/rss", "enabled": true },
+    { "id": "lanacion",      "name": "La Nación",        "url": "https://www.lanacion.com.ar/arc/outboundfeeds/rss/", "enabled": true },
+    { "id": "pagina12",      "name": "Página/12",        "url": "https://www.pagina12.com.ar/arc/outboundfeeds/rss/?outputType=xml", "enabled": true },
+    { "id": "perfil",        "name": "Perfil",           "url": "https://www.perfil.com/feed", "enabled": true },
+    { "id": "ambito",        "name": "Ámbito",           "url": "https://www.ambito.com/rss/pages/home.xml", "enabled": true },
+    { "id": "cronista",      "name": "El Cronista",      "url": "https://www.cronista.com/files/rss/news.xml", "enabled": true },
+    { "id": "iprofesional",  "name": "iProfesional",     "url": "https://www.iprofesional.com/rss/home", "enabled": true },
+    { "id": "diarionorte",   "name": "Diario Norte",     "url": "https://www.diarionorte.com/rss", "enabled": true },
+    { "id": "lmneuquen",     "name": "LM Neuquén",       "url": "https://www.lmneuquen.com/rss/pages/home.xml", "enabled": true },
+    { "id": "minutouno",     "name": "MinutoUno",        "url": "https://www.minutouno.com/rss/pages/home.xml", "enabled": true },
+    { "id": "tiemposur",     "name": "TiempoSur",        "url": "https://www.tiemposur.com.ar/feed", "enabled": true },
+    { "id": "rionegro",      "name": "Río Negro",        "url": "https://www.rionegro.com.ar/feed/", "enabled": true },
+    { "id": "eleconomista",  "name": "El Economista",    "url": "https://eleconomista.com.ar/feed/", "enabled": true },
+    { "id": "eldiarioar",    "name": "elDiarioAR",       "url": "https://www.eldiarioar.com/rss/", "enabled": true }
+  ]
+}

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es-AR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{SITE}} · monitor de medios</title>
+  <meta name="description" content="Monitor de medios argentinos: señales en vivo con los reproductores oficiales de cada medio, titulares con link a la nota original, dólar y clima.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/theme.js"></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#grid">Saltar a las señales</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">{{SITE}}</span>
+      <span class="brand-sub">monitor de medios</span>
+    </div>
+
+    <div class="controls" role="group" aria-label="Disposición de la grilla">
+      <span class="controls-label" id="layout-label">Paneles</span>
+      <button type="button" class="seg" data-g="1" aria-pressed="false" aria-describedby="layout-label">1</button>
+      <button type="button" class="seg" data-g="2" aria-pressed="false" aria-describedby="layout-label">4</button>
+      <button type="button" class="seg" data-g="3" aria-pressed="false" aria-describedby="layout-label">9</button>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="share" class="btn">
+        <span aria-hidden="true">🔗</span> Compartir
+      </button>
+      <button type="button" id="toggle-news" class="btn" aria-controls="news" aria-expanded="true">
+        <span aria-hidden="true">☰</span> Titulares
+      </button>
+      <button type="button" id="theme" class="btn" aria-pressed="false">
+        <span aria-hidden="true" class="theme-check">✓ </span><span class="theme-label">Claro</span>
+      </button>
+      <time id="clock" class="clock" aria-label="Hora de Argentina"></time>
+    </div>
+  </header>
+
+  <section class="databar" aria-label="Datos útiles">
+    <div id="dolar" class="data-group" aria-live="off">
+      <span class="data-title">Dólar</span>
+      <span class="muted">Cargando…</span>
+    </div>
+    <div id="clima" class="data-group" aria-live="off">
+      <span class="data-title">Clima</span>
+      <span class="muted">Cargando…</span>
+    </div>
+  </section>
+
+  <main class="layout">
+    <section id="grid" class="grid" aria-label="Señales en vivo" tabindex="-1"></section>
+
+    <aside id="news" class="news" aria-labelledby="news-title">
+      <div class="news-head">
+        <h2 id="news-title">Titulares</h2>
+        <div class="news-filters">
+          <label for="news-filter" class="sr-only">Filtrar por medio</label>
+          <select id="news-filter">
+            <option value="">Todos los medios</option>
+          </select>
+          <label class="check">
+            <input type="checkbox" id="news-summaries"> Bajadas
+          </label>
+        </div>
+        <p id="news-status" class="news-status muted" role="status">Cargando titulares…</p>
+      </div>
+      <ol id="news-list" class="news-list" aria-live="off"></ol>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <div class="ticker" aria-label="Últimos titulares">
+      <button type="button" id="ticker-pause" class="ticker-btn" aria-pressed="false">
+        <span aria-hidden="true" class="ticker-icon">❚❚</span><span class="ticker-label">Pausar</span>
+      </button>
+      <div class="ticker-viewport">
+        <div id="ticker-track" class="ticker-track"></div>
+      </div>
+    </div>
+    <nav class="footer-links" aria-label="Información">
+      <a href="/terminos">Términos y bajas</a>
+      <span class="muted">Contenido de sus autores · No retransmitimos señales</span>
+    </nav>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p class="noscript">Esta página necesita JavaScript para mostrar las señales y los titulares.</p></noscript>
+</body>
+</html>
