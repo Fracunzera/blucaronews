@@ -201,6 +201,26 @@
     });
   }
 
+  // Calidad liviana en la tele: YouTube elige la resolución según el tamaño en píxeles
+  // del reproductor (ya no deja forzarla). Dibujamos el iframe más chico y lo agrandamos
+  // con CSS: YouTube ve un player chico y manda menos resolución (≈360p con 4 canales,
+  // ≈720p con 1), que la tele decodifica mucho más fácil. En pantalla ocupa lo mismo.
+  function liteScale(p) {
+    if (!TV) return 1;
+    const r = p.body.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const target = state.g > 1 ? 640 : 1280; // ancho en px reales que queremos que vea YouTube
+    return Math.max(1, Math.min(4, (r.width * dpr) / target));
+  }
+
+  function applyLite(p) {
+    const f = $('iframe', p.body);
+    if (!f) return;
+    const k = liteScale(p);
+    p.body.style.setProperty('--lite', String(k));
+    f.classList.toggle('lite', k > 1.05);
+  }
+
   function mountYouTube(p, ch) {
     const live = catalog.youtube && catalog.youtube.status && catalog.youtube.status[ch.source];
     if (live && live.live === false) {
@@ -227,6 +247,7 @@
     const f = frame(src, `${ch.name} — reproductor oficial de YouTube`);
     f.removeAttribute('loading');
     p.body.replaceChildren(f);
+    applyLite(p);
     setStatus(p, 'loading', 'Conectando…');
 
     p.timer = setTimeout(() => showFallback(p, 'Señal no disponible', 'El reproductor no respondió a tiempo.'), 25000);
@@ -499,6 +520,7 @@
     const tg = $('#toggle-news');
     const applyHidden = (hidden) => {
       document.body.classList.toggle('news-hidden', hidden);
+      if (TV) requestAnimationFrame(() => panels.forEach(applyLite));
       tg.setAttribute('aria-expanded', String(!hidden));
       store.set('bn.news.hidden', hidden);
     };
@@ -615,6 +637,10 @@
       renderGrid();
     }));
     MOBILE.addEventListener('change', renderGrid);
+    if (TV) {
+      let t = null;
+      window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => panels.forEach(applyLite), 300); });
+    }
   }
 
   async function loadCatalog() {
@@ -703,6 +729,13 @@
     for (const id of ['#tv-link', '#tv-btn']) { const n = $(id); if (n) n.hidden = true; }
     const nine = document.querySelector('.seg[data-g="3"]');
     if (nine) nine.hidden = true;
+    // El encabezado es un menú: se muestra mientras el foco está adentro.
+    const top = $('.topbar');
+    top.addEventListener('focusin', () => document.body.classList.add('tv-menu'));
+    top.addEventListener('focusout', () => setTimeout(() => {
+      if (!top.contains(document.activeElement)) document.body.classList.remove('tv-menu');
+    }, 0));
+    setTimeout(() => toast('Flechas: moverse · OK: sonido · ▲ arriba de todo: menú'), 1500);
   }
 
   // Pantalla siempre encendida en la tele o con la app instalada (si el navegador deja).
