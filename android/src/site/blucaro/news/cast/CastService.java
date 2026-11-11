@@ -90,6 +90,16 @@ public class CastService extends Service {
     private volatile boolean appOnly;
     private volatile boolean heardApp;
     private long soundLiveSince;
+    // Modo "canales": el sonido sale del <video> de cada reproductor (script yt_tap.js) y no
+    // por el parlante del celu. Llega en bloques; se entrega al codificador a ritmo fijo.
+    private volatile boolean tapMode;
+    private final Object tapLock = new Object();
+    private final byte[] tapRing = new byte[SAMPLE_RATE * CHANNELS * 2 * 2]; // 2 s
+    private int tapHead, tapLen;
+    private volatile long tapChunks, lastTapMs;
+    private volatile String tapError = "";
+    private static final int TAP_TARGET = SAMPLE_RATE * CHANNELS * 2 / 10; // 100 ms de colchón
+    private static final long TAP_DELAY_US = 130_000; // el sonido llega ~130 ms después de sonar
     private Socket tvSocket;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
@@ -134,7 +144,19 @@ public class CastService extends Service {
 
         // 1) Audio primero (decide si el HLS lleva pista de audio).
         boolean audioOk = false;
-        if (wantAudio) {
+        String audioMode = intent.getStringExtra("audioMode");
+        if (audioMode == null) audioMode = wantAudio ? "projection" : "none"; // versiones anteriores de la página
+        tapMode = false;
+        if ("tap".equals(audioMode)) {
+            try {
+                startAacEncoder();
+                tapMode = true;
+                audioOk = true;
+                audioState = "esperando el sonido de los canales";
+            } catch (Throwable t) {
+                audioState = "no disponible (" + t.getClass().getSimpleName() + ")";
+            }
+        } else if (wantAudio) {
             try {
                 MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
                 projection = mpm.getMediaProjection(intent.getIntExtra("resultCode", 0), (Intent) intent.getParcelableExtra("projection"));
@@ -158,6 +180,12 @@ public class CastService extends Service {
         // 3) Codificador de video + pantalla virtual + página.
         startVideo();
         phase = "preparando";
+        if (tapMode) {
+            Thread ta = new Thread(new Runnable() {
+                @Override public void run() { tapLoop(); }
+            }, "bn-tap");
+            ta.start();
+        }
 
         // 4) Avisarle a la tele cuando ya hay video.
         final String host = intent.getStringExtra("tvHost");
@@ -207,6 +235,7 @@ public class CastService extends Service {
         s.setUserAgentString(s.getUserAgentString() + " BlucaroNewsSender/" + versionName());
         web.setWebViewClient(new WebViewClient());
         web.setBackgroundColor(0xFF000000);
+        if (tapMode) setupTap(web); // antes de cargar la página
         presentation.setContentView(web, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         presentation.show();
         web.loadUrl(SENDER_URL);
@@ -303,14 +332,7 @@ public class CastService extends Service {
         recorder = buildRecorder(true);
         appOnly = true;
         heardApp = false;
-
-        MediaFormat af = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, SAMPLE_RATE, CHANNELS);
-        af.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
-        af.setInteger(MediaFormat.KEY_BIT_RATE, 128_000);
-        af.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
-        aenc = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
-        aenc.configure(af, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        aenc.start();
+        startAacEncoder();
         recorder.startRecording();
         audioState = "capturando (solo los canales)";
 
@@ -318,6 +340,146 @@ public class CastService extends Service {
             @Override public void run() { audioLoop(); }
         }, "bn-audio");
         t.start();
+    }
+
+    private void startAacEncoder() throws Exception {
+        MediaFormat af = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, SAMPLE_RATE, CHANNELS);
+        af.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+        af.setInteger(MediaFormat.KEY_BIT_RATE, 128_000);
+        af.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
+        aenc = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+        aenc.configure(af, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        aenc.start();
+    }
+
+    /** Codifica un bloque PCM (16 bits, estéreo, 48 kHz) y lo pasa al HLS. */
+    private void encodePcm(byte[] pcm, int n, long ptsUs, MediaCodec.BufferInfo info) {
+        try {
+            int in = aenc.dequeueInputBuffer(10_000);
+            if (in >= 0) {
+                ByteBuffer ib = aenc.getInputBuffer(in);
+                ib.clear();
+                int len = Math.min(n, ib.remaining());
+                ib.put(pcm, 0, len);
+                aenc.queueInputBuffer(in, 0, len, ptsUs, 0);
+            }
+            int out;
+            while ((out = aenc.dequeueOutputBuffer(info, 0)) >= 0) {
+                if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0 && info.size > 0) {
+                    ByteBuffer ob = aenc.getOutputBuffer(out);
+                    byte[] raw = new byte[info.size];
+                    ob.position(info.offset);
+                    ob.limit(info.offset + info.size);
+                    ob.get(raw);
+                    hls.audio(TsMuxer.adts(raw, SAMPLE_RATE, CHANNELS), to90k(info.presentationTimeUs));
+                    audioFrames++;
+                }
+                aenc.releaseOutputBuffer(out, false);
+            }
+        } catch (Throwable t) {
+            // seguir con el próximo bloque
+        }
+    }
+
+    private static int peakOf(byte[] pcm, int n) {
+        int peak = 0;
+        for (int i = 0; i + 1 < n; i += 64) {
+            int v = (short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8));
+            peak = Math.max(peak, Math.abs(v));
+        }
+        return peak;
+    }
+
+    // ------------------------------------------------------------------ audio: modo "canales"
+
+    private void setupTap(WebView w) {
+        java.util.Set<String> yt = new java.util.HashSet<String>(java.util.Arrays.asList("https://www.youtube.com", "https://www.youtube-nocookie.com"));
+        androidx.webkit.WebViewCompat.addWebMessageListener(w, "bnAudio", yt, new androidx.webkit.WebViewCompat.WebMessageListener() {
+            @Override
+            public void onPostMessage(WebView view, androidx.webkit.WebMessageCompat message, android.net.Uri sourceOrigin,
+                                      boolean isMainFrame, androidx.webkit.JavaScriptReplyProxy replyProxy) {
+                String d = message.getData();
+                if (d == null) return;
+                if (d.startsWith("error:")) { tapError = d.substring(6); return; }
+                onTapChunk(d);
+            }
+        });
+        androidx.webkit.WebViewCompat.addDocumentStartJavaScript(w, readRaw(site.blucaro.news.R.raw.yt_tap), yt);
+    }
+
+    private void onTapChunk(String b64) {
+        byte[] pcm;
+        try { pcm = android.util.Base64.decode(b64, android.util.Base64.DEFAULT); } catch (Throwable t) { return; }
+        int n = pcm.length - pcm.length % 4;
+        if (n <= 0) return;
+        synchronized (tapLock) {
+            int cap = tapRing.length;
+            int off = 0;
+            if (n > cap) { off = n - cap; n = cap; }
+            int over = tapLen + n - cap;
+            if (over > 0) { tapHead = (tapHead + over) % cap; tapLen -= over; }
+            int tail = (tapHead + tapLen) % cap;
+            int first = Math.min(n, cap - tail);
+            System.arraycopy(pcm, off, tapRing, tail, first);
+            System.arraycopy(pcm, off + first, tapRing, 0, n - first);
+            tapLen += n;
+        }
+        tapChunks++;
+        lastTapMs = System.currentTimeMillis();
+    }
+
+    /** Entrega 1024 muestras cada 21,3 ms: lo que llegó de los canales, o silencio. */
+    private void tapLoop() {
+        final int frameBytes = 1024 * CHANNELS * 2;
+        final int cap = tapRing.length;
+        byte[] frame = new byte[frameBytes];
+        MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        long t0 = System.nanoTime();
+        long startUs = t0 / 1000;
+        long n = 0;
+        while (running && tapMode) {
+            long due = t0 + n * 1024L * 1_000_000_000L / SAMPLE_RATE;
+            long wait = due - System.nanoTime();
+            if (wait > 0) {
+                try { Thread.sleep(wait / 1_000_000, (int) (wait % 1_000_000)); } catch (InterruptedException ignored) { }
+            }
+            boolean got = false;
+            synchronized (tapLock) {
+                if (tapLen > 3 * TAP_TARGET) { // se atrasó: descartar lo viejo
+                    int drop = tapLen - TAP_TARGET;
+                    drop -= drop % 4;
+                    tapHead = (tapHead + drop) % cap;
+                    tapLen -= drop;
+                }
+                if (tapLen >= frameBytes) {
+                    int first = Math.min(frameBytes, cap - tapHead);
+                    System.arraycopy(tapRing, tapHead, frame, 0, first);
+                    System.arraycopy(tapRing, 0, frame, first, frameBytes - first);
+                    tapHead = (tapHead + frameBytes) % cap;
+                    tapLen -= frameBytes;
+                    got = true;
+                }
+            }
+            if (!got) java.util.Arrays.fill(frame, (byte) 0);
+            audioLevel = got ? peakOf(frame, frameBytes) * 100 / 32768 : 0;
+            long ptsUs = startUs + n * 1024L * 1_000_000L / SAMPLE_RATE - TAP_DELAY_US;
+            encodePcm(frame, frameBytes, ptsUs, info);
+            n++;
+        }
+    }
+
+    private String readRaw(int id) {
+        try {
+            java.io.InputStream in = getResources().openRawResource(id);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int k;
+            while ((k = in.read(buf)) > 0) out.write(buf, 0, k);
+            in.close();
+            return out.toString("UTF-8");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /** {@code onlyThisApp}: solo el sonido de esta app; si no, todo el sonido multimedia del celu. */
@@ -349,6 +511,7 @@ public class CastService extends Service {
      * a capturar todo el sonido multimedia (como antes) para que la tele no quede muda.
      */
     private void checkAudioFallback() {
+        if (tapMode) { checkTap(); return; }
         if (!appOnly || heardApp || recorder == null) { soundLiveSince = 0; return; }
         boolean live = false;
         try {
@@ -382,6 +545,37 @@ public class CastService extends Service {
         }, "bn-audio-amplio").start();
     }
 
+    private boolean soundPanelLive() {
+        try {
+            Object v = new org.json.JSONTokener(pageState).nextValue();
+            if (v instanceof JSONObject) {
+                org.json.JSONArray ps = ((JSONObject) v).optJSONArray("panels");
+                for (int i = 0; ps != null && i < ps.length(); i++) {
+                    JSONObject p = ps.getJSONObject(i);
+                    if (p.optBoolean("sound") && p.optString("status").contains("EN VIVO")) return true;
+                }
+            }
+        } catch (Throwable ignored) { }
+        return false;
+    }
+
+    /** Modo "canales": informar en el control remoto si llega o no el sonido. */
+    private void checkTap() {
+        long now = System.currentTimeMillis();
+        boolean recent = now - lastTapMs < 3000;
+        if (recent) { audioState = "solo los canales (el celu queda en silencio)"; soundLiveSince = 0; return; }
+        if (!soundPanelLive()) {
+            soundLiveSince = 0;
+            audioState = tapChunks > 0 ? "solo los canales (ahora ningún canal tiene sonido)" : "esperando que un canal tenga sonido";
+            return;
+        }
+        if (soundLiveSince == 0) soundLiveSince = now;
+        if (now - soundLiveSince > 8000) {
+            audioState = "NO llega el sonido de los canales" + (tapError.isEmpty() ? "" : " (" + tapError + ")")
+                + ": detené y probá «Método alternativo de sonido»";
+        }
+    }
+
     private void audioLoop() {
         final int chunk = 1024 * CHANNELS * 2; // 1024 muestras estéreo de 16 bits = un frame AAC
         byte[] pcm = new byte[chunk];
@@ -397,39 +591,10 @@ public class CastService extends Service {
             if (startUs < 0) startUs = System.nanoTime() / 1000 - 20_000;
             long ptsUs = startUs + samples * 1_000_000L / SAMPLE_RATE;
             samples += n / (CHANNELS * 2);
-            // Nivel aproximado (para saber si llega sonido).
-            int peak = 0;
-            for (int i = 0; i + 1 < n; i += 64) {
-                int v = (short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8));
-                peak = Math.max(peak, Math.abs(v));
-            }
+            int peak = peakOf(pcm, n);
             audioLevel = peak * 100 / 32768;
             if (appOnly && peak > 0) heardApp = true;
-            try {
-                int in = aenc.dequeueInputBuffer(10_000);
-                if (in >= 0) {
-                    ByteBuffer ib = aenc.getInputBuffer(in);
-                    ib.clear();
-                    int len = Math.min(n, ib.remaining());
-                    ib.put(pcm, 0, len);
-                    aenc.queueInputBuffer(in, 0, len, ptsUs, 0);
-                }
-                int out;
-                while ((out = aenc.dequeueOutputBuffer(info, 0)) >= 0) {
-                    if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0 && info.size > 0) {
-                        ByteBuffer ob = aenc.getOutputBuffer(out);
-                        byte[] raw = new byte[info.size];
-                        ob.position(info.offset);
-                        ob.limit(info.offset + info.size);
-                        ob.get(raw);
-                        hls.audio(TsMuxer.adts(raw, SAMPLE_RATE, CHANNELS), to90k(info.presentationTimeUs));
-                        audioFrames++;
-                    }
-                    aenc.releaseOutputBuffer(out, false);
-                }
-            } catch (Throwable t) {
-                // seguir con el próximo bloque
-            }
+            encodePcm(pcm, n, ptsUs, info);
         }
     }
 
@@ -584,6 +749,10 @@ public class CastService extends Service {
     /** Libera todo (pantalla virtual, codificadores, audio, servidor, conexión con la tele). */
     private synchronized void teardown() {
         running = false;
+        tapMode = false;
+        synchronized (tapLock) { tapHead = 0; tapLen = 0; }
+        tapChunks = 0;
+        tapError = "";
         main.removeCallbacks(pollPage);
         final Socket s = tvSocket;
         tvSocket = null;

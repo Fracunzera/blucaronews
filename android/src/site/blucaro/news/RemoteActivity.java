@@ -45,6 +45,7 @@ public class RemoteActivity extends Activity {
     private String castHost, castName;
     private int castPort;
     private boolean castAudio;
+    private String castMode = "none"; // "tap" (sonido de los canales), "projection" (captura de Android) o "none"
 
     @Override
     protected void onCreate(Bundle state) {
@@ -109,8 +110,15 @@ public class RemoteActivity extends Activity {
         }
 
         @JavascriptInterface public void cast(final String host, final int port, final String name, final boolean audio) {
-            runOnUiThread(new Runnable() { @Override public void run() { beginCast(host, port, name, audio); } });
+            runOnUiThread(new Runnable() { @Override public void run() { beginCast(host, port, name, audio ? "auto" : "none"); } });
         }
+
+        /** mode: "auto" (sonido de los canales si se puede), "android" (captura de Android) o "none". */
+        @JavascriptInterface public void cast2(final String host, final int port, final String name, final String mode) {
+            runOnUiThread(new Runnable() { @Override public void run() { beginCast(host, port, name, mode); } });
+        }
+
+        @JavascriptInterface public boolean channelAudio() { return tapSupported(); }
 
         @JavascriptInterface public void stop() {
             startService(new Intent(RemoteActivity.this, CastService.class).setAction(CastService.ACTION_STOP));
@@ -129,11 +137,24 @@ public class RemoteActivity extends Activity {
 
     // ------------------------------------------------------------------ permisos y arranque
 
-    private void beginCast(String host, int port, String name, boolean audio) {
+    /** El sonido sale directo de los reproductores de la grilla (sin permisos, celu en silencio). */
+    private boolean tapSupported() {
+        try {
+            return androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)
+                && androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_LISTENER);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private void beginCast(String host, int port, String name, String mode) {
         castHost = host;
         castPort = port;
         castName = name;
-        castAudio = audio && Build.VERSION.SDK_INT >= 29;
+        if ("auto".equals(mode)) castMode = tapSupported() ? "tap" : (Build.VERSION.SDK_INT >= 29 ? "projection" : "none");
+        else if ("android".equals(mode)) castMode = Build.VERSION.SDK_INT >= 29 ? "projection" : "none";
+        else castMode = "none";
+        castAudio = "projection".equals(castMode);
         java.util.ArrayList<String> ask = new java.util.ArrayList<String>();
         if (castAudio && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ask.add(android.Manifest.permission.RECORD_AUDIO);
@@ -158,6 +179,7 @@ public class RemoteActivity extends Activity {
             MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             startActivityForResult(mpm.createScreenCaptureIntent(), REQ_PROJECTION);
         } else {
+            if ("projection".equals(castMode)) castMode = "none"; // sin permiso de audio
             startCast(0, null);
         }
     }
@@ -166,7 +188,7 @@ public class RemoteActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode != REQ_PROJECTION) return;
         if (resultCode == RESULT_OK && data != null) startCast(resultCode, data);
-        else startCast(0, null); // sin sonido en la tele
+        else { castMode = "none"; startCast(0, null); } // sin sonido en la tele
     }
 
     private void startCast(int resultCode, Intent projection) {
@@ -175,6 +197,7 @@ public class RemoteActivity extends Activity {
         i.putExtra("tvPort", castPort);
         i.putExtra("tvName", castName);
         i.putExtra("audio", projection != null);
+        i.putExtra("audioMode", projection != null ? "projection" : castMode);
         i.putExtra("resultCode", resultCode);
         if (projection != null) i.putExtra("projection", projection);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);

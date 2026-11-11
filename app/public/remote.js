@@ -22,6 +22,17 @@
 
   if (!app) { $('#no-app').hidden = false; return; }
 
+  // Versiones nuevas de la app: el sonido sale directo de los canales (sin permisos).
+  const channelAudio = typeof app.cast2 === 'function' && typeof app.channelAudio === 'function' && app.channelAudio();
+  const syncAudioHints = () => {
+    const alt = $('#alt-audio').checked;
+    $('#audio-hint-tap').hidden = !channelAudio || alt;
+    $('#audio-hint-android').hidden = channelAudio && !alt;
+  };
+  $('#alt-box').hidden = !channelAudio;
+  $('#alt-audio').addEventListener('change', syncAudioHints);
+  syncAudioHints();
+
   let catalog = { channels: [], categories: {} };
   fetch('/api/channels').then((r) => r.json()).then((d) => { catalog = d; lastSig = ''; }).catch(() => {});
 
@@ -44,7 +55,13 @@
 
   function cast(tv) {
     $('#idle-error').hidden = true;
-    app.cast(tv.host, Number(tv.port), tv.name, $('#audio').checked);
+    const wantAudio = $('#audio').checked;
+    if (typeof app.cast2 === 'function') {
+      const mode = !wantAudio ? 'none' : $('#alt-audio').checked ? 'android' : 'auto';
+      app.cast2(tv.host, Number(tv.port), tv.name, mode);
+    } else {
+      app.cast(tv.host, Number(tv.port), tv.name, wantAudio);
+    }
   }
 
   $('#add-ip').addEventListener('click', () => {
