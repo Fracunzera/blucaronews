@@ -112,7 +112,9 @@ async function runClima() {
 
 async function runYoutube() {
   const ids = [...new Set(getChannels().filter((c) => c.type === 'youtube').map((c) => c.source))];
-  const r = await fetchYoutubeLive(ids);
+  const prev = kvGet('ytlive')?.value;
+  // Formato viejo (solo el mapa de estados) => se descarta.
+  const r = await fetchYoutubeLive(ids, prev && prev.status ? prev : null);
   if (r) kvSet('ytlive', r);
 }
 

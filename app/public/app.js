@@ -112,8 +112,8 @@
     2: 'Parámetros inválidos.',
     5: 'El navegador no puede reproducir este video.',
     100: 'El canal no está transmitiendo en vivo ahora o el video no existe.',
-    101: 'YouTube no habilita esta señal acá: el medio desactivó la inserción o YouTube bloqueó la reproducción.',
-    150: 'YouTube no habilita esta señal acá: el medio desactivó la inserción o YouTube bloqueó la reproducción.',
+    101: 'No está en vivo ahora o el medio no permite verlo fuera de YouTube.',
+    150: 'No está en vivo ahora o el medio no permite verlo fuera de YouTube.',
     152: 'YouTube rechazó el reproductor insertado.',
     153: 'YouTube rechazó el reproductor insertado (falta el referer).',
   };

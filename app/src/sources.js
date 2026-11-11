@@ -123,18 +123,16 @@ async function recentVideoIds(channelId) {
   return [...xml.matchAll(/<yt:videoId>([\w-]{11})<\/yt:videoId>/g)].map((m) => m[1]).slice(0, 15);
 }
 
-export async function fetchYoutubeLive(channelIds) {
-  if (!settings.ytApiKey || channelIds.length === 0) return null;
-  const byVideo = new Map();
-  await Promise.all(
-    channelIds.map(async (cid) => {
-      try {
-        for (const v of await recentVideoIds(cid)) byVideo.set(v, cid);
-      } catch {}
-    }),
-  );
-  const ids = [...byVideo.keys()];
-  const result = Object.fromEntries(channelIds.map((c) => [c, { live: false, videoId: null, embeddable: null }]));
+// Los canales 24 h tienen el vivo abierto desde hace semanas y no aparece en el feed.
+// Para esos se usa search.list (eventType=live), que cuesta 100 unidades: se hace como
+// mucho cada SEARCH_EVERY_MS por canal, solo si el canal no tiene un vivo conocido, y
+// con un tope diario para no pasar la cuota gratuita (10.000 unidades/día).
+// Una vez encontrado, el ID se revalida cada 5 min con videos.list (1 unidad / 50 IDs).
+const SEARCH_EVERY_MS = 90 * 60_000;
+const SEARCH_DAILY_BUDGET = 7000;
+
+async function videosInfo(ids) {
+  const out = [];
   for (let i = 0; i < ids.length; i += 50) {
     const q = new URLSearchParams({
       part: 'snippet,status',
@@ -143,15 +141,78 @@ export async function fetchYoutubeLive(channelIds) {
       fields: 'items(id,snippet(channelId,liveBroadcastContent,title),status(embeddable))',
     });
     const data = await getJson(`https://www.googleapis.com/youtube/v3/videos?${q}`);
-    for (const it of data.items || []) {
-      const cid = it.snippet?.channelId || byVideo.get(it.id);
-      if (!result[cid]) continue;
-      if (it.snippet?.liveBroadcastContent === 'live' && !result[cid].live) {
-        result[cid] = { live: true, videoId: it.id, embeddable: it.status?.embeddable !== false, title: it.snippet.title };
+    out.push(...(data.items || []));
+  }
+  return out;
+}
+
+async function searchLive(channelId) {
+  const q = new URLSearchParams({
+    part: 'id', channelId, eventType: 'live', type: 'video', maxResults: '3', key: settings.ytApiKey,
+    fields: 'items(id(videoId))',
+  });
+  const data = await getJson(`https://www.googleapis.com/youtube/v3/search?${q}`);
+  return (data.items || []).map((it) => it.id?.videoId).filter(Boolean);
+}
+
+/**
+ * prev: el resultado anterior ({ status, meta }) para reusar IDs conocidos y no
+ * repetir búsquedas. Devuelve { status: { [channelId]: {live, videoId, embeddable, title} }, meta }.
+ */
+export async function fetchYoutubeLive(channelIds, prev = null, now = Date.now()) {
+  if (!settings.ytApiKey || channelIds.length === 0) return null;
+  const day = new Date(now).toISOString().slice(0, 10);
+  const meta = {
+    day,
+    searchUnits: prev?.meta?.day === day ? prev.meta.searchUnits || 0 : 0,
+    searchedAt: { ...(prev?.meta?.searchedAt || {}) },
+  };
+
+  // 1) Candidatos: últimos videos del feed + el vivo conocido de la pasada anterior.
+  const candidates = new Set();
+  await Promise.all(
+    channelIds.map(async (cid) => {
+      try {
+        for (const v of await recentVideoIds(cid)) candidates.add(v);
+      } catch {}
+      const known = prev?.status?.[cid]?.videoId;
+      if (known) candidates.add(known);
+    }),
+  );
+
+  // Default: desconocido (live: null) => el navegador carga el player del canal igual.
+  const status = Object.fromEntries(channelIds.map((c) => [c, { live: null, videoId: null, embeddable: null }]));
+  const apply = (items) => {
+    for (const it of items) {
+      const cid = it.snippet?.channelId;
+      if (!status[cid] || status[cid].live) continue;
+      if (it.snippet?.liveBroadcastContent === 'live') {
+        status[cid] = { live: true, videoId: it.id, embeddable: it.status?.embeddable !== false, title: it.snippet.title };
       }
     }
+  };
+  apply(await videosInfo([...candidates]));
+
+  // 2) Canales sin vivo encontrado: buscar (caro) respetando intervalo y tope diario.
+  const found = [];
+  for (const cid of channelIds) {
+    if (status[cid].live) continue;
+    const last = meta.searchedAt[cid] || 0;
+    if (now - last < SEARCH_EVERY_MS) {
+      // Búsqueda reciente sin vivo: si sigue sin aparecer en el feed, no hay vivo.
+      if (prev?.status?.[cid]?.live === false) status[cid].live = false;
+      continue;
+    }
+    if (meta.searchUnits + 100 > SEARCH_DAILY_BUDGET) continue;
+    meta.searchUnits += 100;
+    meta.searchedAt[cid] = now;
+    const ids = await searchLive(cid).catch(() => null);
+    if (ids === null) continue;
+    if (ids.length === 0) status[cid].live = false;
+    else found.push(...ids);
   }
-  return result;
+  if (found.length) apply(await videosInfo(found));
+  return { status, meta };
 }
 
 /**
