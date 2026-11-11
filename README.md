@@ -216,13 +216,13 @@ curl -s http://127.0.0.1:3080/api/health
 ## Catálogo inicial (verificado el 11/11/2026)
 
 **10 canales (YouTube).** Para cada uno se verificó el ID con el feed oficial del canal y el oEmbed oficial respondió 200 en sus últimos videos:
-- TN Todo Noticias, C5N, A24, La Nación (LN+) y Canal 26 (noticias)
-- Telefe Noticias (aire)
-- Radio Mitre y Urbana Play 104.3 (radio)
+- TN Todo Noticias, C5N, A24, La Nación (LN+) y Crónica TV (noticias)
+- Luzu TV (aire)
+- Urbana Play 104.3 (radio)
 - Canal 9 Santa Cruz (Santa Cruz)
-- DW Español (internacionales)
+- DW Español y France 24 Español (internacionales)
 
-También pasaron la verificación, por si querés sumarlos: France 24 Español (`UCUdOoVWuWmgo1wByzcsyKDQ`), Crónica TV (`UCT7KFGv6s2a-rh2Jq8ZdM1g`) y Luzu TV (`UCTHaNTsP7hsVgBxARZTuajw`).
+Se sacaron **Canal 26, Telefe Noticias y Radio Mitre**: sus videos comunes se pueden insertar, pero el vivo da error 150 fuera de YouTube (el medio bloquea la inserción del vivo). Que oEmbed responda 200 en los últimos videos no garantiza que el vivo se pueda insertar: hay que probar el panel en un navegador.
 
 **15 feeds RSS:** Infobae, Noticias Argentinas, La Nación, Página/12, Perfil, Ámbito, El Cronista, iProfesional, Diario Norte, LM Neuquén, MinutoUno, TiempoSur (Santa Cruz), Río Negro, El Economista y elDiarioAR.
 
