@@ -76,8 +76,10 @@
   function readState() {
     const p = new URLSearchParams(location.search);
     const saved = store.get(STORE_KEY, null);
-    const g = Number(p.get('g') || saved?.g || 2);
+    const g = Number(p.get('g') || saved?.g || (TV ? 1 : 2));
     state.g = [1, 2, 3].includes(g) ? g : 2;
+    // En la tele, más de 4 reproductores a la vez traban el equipo.
+    if (TV && state.g > 2) state.g = 2;
     const fromUrl = p.get('c');
     state.c = fromUrl != null ? fromUrl.split(',').map((s) => s.trim().slice(0, 40)) : Array.isArray(saved?.c) ? saved.c : [];
   }
@@ -146,6 +148,7 @@
       el('div', { class: 'fallback', role: 'group', 'aria-label': `Panel ${p.index + 1}: ${title}` },
         el('div', { class: 'title' }, el('span', { 'aria-hidden': 'true', text: '⚠ ' }), title),
         detail ? el('div', { class: 'detail', text: detail }) : null,
+        TV ? el('div', { class: 'detail', text: 'OK = reintentar · ▲ = cambiar de canal' }) : null,
         el('button', { type: 'button', class: 'btn', onclick: () => mount(p) }, el('span', { 'aria-hidden': 'true', text: '↻ ' }), 'Reintentar'),
       ),
     );
@@ -180,6 +183,7 @@
 
   function teardown(p) {
     clearTimeout(p.timer);
+    clearTimeout(p.resume);
     if (p.player && p.player.destroy) { try { p.player.destroy(); } catch { /* ignorar */ } }
     p.player = null;
     p.body.replaceChildren();
@@ -216,6 +220,7 @@
     const params = new URLSearchParams({
       autoplay: '1', mute: '1', playsinline: '1', rel: '0', enablejsapi: '1', origin: location.origin,
     });
+    if (TV) { params.set('controls', '0'); params.set('disablekb', '1'); params.set('fs', '0'); params.set('iv_load_policy', '3'); }
     const src = live && live.videoId
       ? `https://www.youtube.com/embed/${encodeURIComponent(live.videoId)}?${params}`
       : `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(ch.source)}&${params}`;
@@ -237,9 +242,13 @@
           },
           onStateChange: (e) => {
             clearTimeout(p.timer);
-            if (e.data === YT.PlayerState.PLAYING) setStatus(p, 'live', 'EN VIVO');
+            if (e.data === YT.PlayerState.PLAYING) { clearTimeout(p.resume); setStatus(p, 'live', 'EN VIVO'); }
             else if (e.data === YT.PlayerState.BUFFERING) setStatus(p, 'loading', 'Cargando…');
-            else if (e.data === YT.PlayerState.PAUSED) setStatus(p, 'idle', 'En pausa');
+            else if (e.data === YT.PlayerState.PAUSED) {
+              setStatus(p, 'idle', 'En pausa');
+              // En la tele nadie pausa a propósito (no hay mouse): si se frenó, lo reanudamos.
+              if (TV) { clearTimeout(p.resume); p.resume = setTimeout(() => { try { p.player.playVideo(); } catch {} }, 1500); }
+            }
             else if (e.data === YT.PlayerState.ENDED) setStatus(p, 'offline', 'Transmisión terminada');
           },
           onError: (e) => showFallback(p, 'Señal no disponible', `${YT_ERRORS[e.data] || 'Error del reproductor.'} (código ${e.data})`),
@@ -340,7 +349,9 @@
       body.addEventListener('keydown', (e) => {
         if (e.target !== body || !(e.key === 'Enter' || e.key === ' ' || e.keyCode === 23)) return;
         e.preventDefault();
-        toggleMute(p);
+        // Si el panel muestra un cartel (sin señal / sin vivo), OK reintenta.
+        if ($('.fallback', body)) mount(p, { force: true });
+        else toggleMute(p);
       });
       select.addEventListener('change', () => { state.c[i] = select.value; persist(); mount(p); });
       reload.addEventListener('click', () => mount(p, { force: true }));
@@ -491,7 +502,7 @@
       tg.setAttribute('aria-expanded', String(!hidden));
       store.set('bn.news.hidden', hidden);
     };
-    applyHidden(store.get('bn.news.hidden', false));
+    applyHidden(store.get('bn.news.hidden', TV));
     tg.addEventListener('click', () => applyHidden(!document.body.classList.contains('news-hidden')));
   }
 
@@ -690,6 +701,8 @@
       if (document.activeElement && document.activeElement.tagName === 'IFRAME') panels[0]?.body.focus();
     }, 0));
     for (const id of ['#tv-link', '#tv-btn']) { const n = $(id); if (n) n.hidden = true; }
+    const nine = document.querySelector('.seg[data-g="3"]');
+    if (nine) nine.hidden = true;
   }
 
   // Pantalla siempre encendida en la tele o con la app instalada (si el navegador deja).
