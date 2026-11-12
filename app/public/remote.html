@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es-AR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mandar a la tele · {{SITE}}</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/page.css">
+  <script src="/theme.js"></script>
+  <script src="/remote.js" defer></script>
+</head>
+<body class="page remote">
+  <main class="rm">
+    <header class="rm-head">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>{{SITE}} <span class="muted">· en la tele</span></h1>
+    </header>
+
+    <!-- Sin la app de Android (abrieron /remote en un navegador común) -->
+    <section id="no-app" class="card" hidden>
+      <h2>Esto es el control remoto de la app</h2>
+      <p>Para mandar los canales a la tele desde el celu necesitás la app <strong>{{SITE}}</strong> para Android.</p>
+      <p><a class="btn primary big" href="/app.apk">⬇ Bajar la app (Android)</a></p>
+      <p class="hint">También tiene que estar instalada y abierta en la tele. Las instrucciones están en <a href="/tv">{{DOMAIN}}/tv</a>.</p>
+    </section>
+
+    <!-- Elegir la tele -->
+    <section id="pick" hidden>
+      <div id="idle-error" class="rm-error" hidden></div>
+      <a class="rm-local" href="/">
+        <span class="rm-tv-icon" aria-hidden="true">📱</span>
+        <span class="rm-tv-name"><strong>Usar en el celu</strong><span class="hint">Ver los canales acá, sin la tele</span></span>
+        <span class="rm-tv-go">Abrir ›</span>
+      </a>
+      <h2>Elegí tu tele</h2>
+      <ul id="tvs" class="rm-tvs" aria-live="polite"></ul>
+      <p id="searching" class="hint"><span class="spin" aria-hidden="true">◌</span> Buscando teles en tu Wi-Fi…</p>
+      <label class="rm-check"><input type="checkbox" id="audio" checked> Sonido en la tele</label>
+      <p class="hint" id="audio-hint-tap" hidden>El sonido de los canales va solo a la tele: el celu queda en silencio y no se cuela nada más (WhatsApp, música, etc.).</p>
+      <p class="hint" id="audio-hint-android">Android te va a pedir permiso para grabar audio y te va a preguntar si querés compartir o grabar la pantalla: aceptá (si te deja elegir, elegí <strong>{{SITE}}</strong>). Es solo para llevar el sonido: en la tele no se ve tu pantalla, solo los canales.</p>
+      <details class="rm-help">
+        <summary>¿No aparece tu tele?</summary>
+        <ol>
+          <li>En la tele, abrí la app <strong>{{SITE}}</strong> (tiene que quedar abierta).</li>
+          <li>El celu y la tele tienen que estar en <strong>el mismo Wi-Fi</strong>.</li>
+          <li>Si igual no aparece, en la tele abrí el menú (▲ arriba de todo) → <strong>📱 Celu</strong>: ahí está la IP. Escribila acá:</li>
+        </ol>
+        <div class="rm-ip">
+          <input id="ip" inputmode="decimal" placeholder="192.168.0.10" autocomplete="off" aria-label="IP de la tele">
+          <button type="button" id="add-ip" class="btn">Agregar</button>
+        </div>
+        <p><button type="button" id="rescan" class="btn">↻ Buscar de nuevo</button></p>
+      </details>
+      <details class="rm-help" id="alt-box" hidden>
+        <summary>¿No se escucha en la tele?</summary>
+        <label class="rm-check"><input type="checkbox" id="alt-audio"> Método alternativo de sonido</label>
+        <p class="hint">Usa la captura de sonido de Android: pide permisos y el sonido también sale por el parlante del celu. Probalo solo si con el método normal la tele queda muda.</p>
+      </details>
+    </section>
+
+    <!-- Transmitiendo -->
+    <section id="live" hidden>
+      <div class="rm-status">
+        <div>
+          <div class="rm-phase" id="phase">Conectando…</div>
+          <div class="hint" id="tvname"></div>
+        </div>
+        <button type="button" id="stop" class="btn danger">⏹ Detener</button>
+      </div>
+      <div id="live-error" class="rm-error" hidden></div>
+
+      <h2>Canales a la vez</h2>
+      <div class="rm-seg" role="group" aria-label="Canales a la vez">
+        <button type="button" class="seg" data-layout="1">1</button>
+        <button type="button" class="seg" data-layout="d">2</button>
+        <button type="button" class="seg" data-layout="2">4</button>
+      </div>
+
+      <h2>Canales <span class="hint">· tocá 🔊 para elegir cuál se escucha</span></h2>
+      <div id="panels" class="rm-panels"></div>
+      <p><button type="button" id="mute-all" class="btn">🔇 Sin sonido</button></p>
+
+      <p class="hint">Podés salir de la app o apagar la pantalla del celu: la transmisión sigue. Para cortarla: <strong>Detener</strong>, o desde la notificación. Conviene tener el celu enchufado.</p>
+      <p class="hint rm-diag" id="diag"></p>
+    </section>
+  </main>
+</body>
+</html>

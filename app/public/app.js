@@ -15,6 +15,13 @@
   // La app de TV (desde la versión con BNInject) corre un script dentro del reproductor de
   // YouTube que puede pedirle H.264 (lo más liviano para la tele) y medir cuadros perdidos.
   const INJECT = /BNInject\/1/.test(navigator.userAgent);
+  // Celu -> tele: la app del celu carga esta página en una pantalla invisible (emisor) y
+  // la transmite a la tele como un solo video. Se maneja con window.bnRemote.
+  const SENDER = /BlucaroNewsSender/.test(navigator.userAgent);
+  // Dentro de la app del celu (fuera de la transmisión): "Ver en la tele" vuelve al control remoto.
+  const PHONE_APP = /BlucaroNewsRemote/.test(navigator.userAgent);
+  // La app de TV recibe del celu: anuncia su IP:puerto para mostrarla si hay que escribirla.
+  const RECV = (/BNRecv\/([0-9.]+):(\d+)/.exec(navigator.userAgent) || []).slice(1);
 
   const store = {
     get(k, def) {
@@ -30,7 +37,7 @@
 
   const TV = (() => {
     const q = new URLSearchParams(location.search).get('tv');
-    if (APP_TV) return true;
+    if (APP_TV || SENDER) return true;
     if (q != null) { store.set('bn.tv', q !== '0'); return q !== '0'; }
     const saved = store.get('bn.tv', null);
     return saved == null ? TV_UA.test(navigator.userAgent) : Boolean(saved);
@@ -79,6 +86,7 @@
   const fmtTime = (ts) => new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: ART }).format(ts);
 
   function toast(msg) {
+    if (SENDER) return; // en la tele (vía celu) no se muestran avisos
     const t = $('#toast');
     t.textContent = msg;
     t.classList.add('show');
@@ -104,9 +112,9 @@
     const p = new URLSearchParams(location.search);
     const saved = store.get(STORE_KEY, null);
     // App de TV: arranca con 2 canales lado a lado ('d'); 4 es opcional, con aviso.
-    const raw = p.get('g') || (APP_TV ? store.get('bn.tv.g', 'd') : saved?.g) || (TV ? 1 : 2);
+    const raw = p.get('g') || (APP_TV ? store.get('bn.tv.g', 'd') : SENDER ? store.get('bn.sender.g', 2) : saved?.g) || (TV ? 1 : 2);
     state.g = raw === 'd' ? 'd' : [1, 2, 3].includes(Number(raw)) ? Number(raw) : 2;
-    if (state.g === 'd' && !APP_TV) state.g = 2;
+    if (state.g === 'd' && !APP_TV && !SENDER) state.g = 2;
     // En la tele, más de 4 reproductores a la vez traban el equipo.
     if (TV && state.g === 3) state.g = 2;
     const fromUrl = p.get('c');
@@ -133,6 +141,7 @@
 
   function persist() {
     if (APP_TV) store.set('bn.tv.g', state.g);
+    if (SENDER) store.set('bn.sender.g', state.g);
     else store.set(STORE_KEY, { g: state.g, c: state.c.slice(0, 9) });
     if (APP_TV) store.set(STORE_KEY, { ...(store.get(STORE_KEY, {}) || {}), c: state.c.slice(0, 9) });
     try { history.replaceState(null, '', shareUrl()); } catch { /* ignorar */ }
@@ -244,6 +253,7 @@
   // con CSS: YouTube ve un player chico y manda menos resolución (≈360p con 4 canales,
   // ≈720p con 1), que la tele decodifica mucho más fácil. En pantalla ocupa lo mismo.
   function liteScale(p) {
+    if (SENDER) return 1; // la pantalla invisible ya es de 1280x720: cada canal ≈360p
     if (!TV) return 1;
     const r = p.body.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -278,7 +288,7 @@
       if (tvPerf.struggles.length >= 4) { tvPerf.struggles = []; fallbackToOne(); }
       return;
     }
-    if (tvPerf.struggles.length >= 4 && tvPerf.level < QUALITY.length - 1 && now - tvPerf.lastChange > 30_000) {
+    if (!SENDER && tvPerf.struggles.length >= 4 && tvPerf.level < QUALITY.length - 1 && now - tvPerf.lastChange > 30_000) {
       tvPerf.struggles = [];
       tvPerf.lastChange = now;
       tvPerf.level++;
@@ -800,6 +810,7 @@
   // Aviso antes de pasar a 4 canales en la app de TV.
   // Ventana de aviso manejable con el control (flechas + OK; Atrás la cierra).
   function modal(title, paragraphs, buttons) {
+    if (SENDER) return;
     const close = () => { dlg.remove(); document.body.classList.remove('modal-open'); };
     const btns = buttons.map((b, i) => el('button', {
       type: 'button', class: i === 0 ? 'btn primary' : 'btn',
@@ -923,9 +934,56 @@
   }
   window.bnBack = tvBack;
 
+  // Emisor (celu -> tele): sin menús ni avisos; el control remoto del celu manda órdenes.
+  function setupSender() {
+    document.documentElement.classList.add('sender');
+    const soundIndex = () => panels.findIndex((p) => p.muted === false);
+    window.bnRemote = {
+      getState: () => ({
+        g: state.g,
+        panels: panels.map((p) => {
+          const id = state.c[p.index] || '';
+          return { i: p.index, id, name: (byId.get(id) || {}).name || '', status: p.status.textContent.trim(), sound: p.muted === false };
+        }),
+      }),
+      apply: (cmd) => {
+        if (!cmd || typeof cmd !== 'object') return;
+        if (cmd.layout != null) {
+          const g = cmd.layout === 'd' ? 'd' : Number(cmd.layout);
+          if (g === 'd' || g === 1 || g === 2) {
+            const keep = soundIndex();
+            state.g = g;
+            persist();
+            renderGrid();
+            if (keep >= 0 && panels[keep]) { panels[keep].muted = false; applyMute(panels[keep]); }
+          }
+        }
+        if (Array.isArray(cmd.channel)) {
+          const [i, id] = cmd.channel;
+          const p = panels[Number(i)];
+          if (p && byId.has(id)) { state.c[p.index] = id; persist(); mount(p); applyMute(p); }
+        }
+        if (cmd.sound != null) panels.forEach((p) => { p.muted = p.index !== Number(cmd.sound); applyMute(p); });
+        if (cmd.reload != null && panels[Number(cmd.reload)]) mount(panels[Number(cmd.reload)], { force: true });
+      },
+    };
+  }
+
   function setupTv() {
     if (!TV) return;
     document.documentElement.classList.add('tv');
+    if (SENDER) { setupSender(); return; }
+    if (APP_TV && RECV.length) {
+      // Menú: recibir del celu (con la IP por si el celu no encuentra la tele solo).
+      const b = el('button', { type: 'button', class: 'btn', id: 'tv-phone' }, '📱 Celu');
+      b.addEventListener('click', () => modal('Ver desde el celu', [
+        'Con el celu, la tele muestra los canales sin trabarse: el celu hace el trabajo pesado y le manda a la tele un solo video.',
+        '1. Instalá la app Blucaro News en tu celu Android (en el celu: news.blucaro.site/app.apk).',
+        '2. Con el celu en el mismo Wi-Fi que la tele, abrí la app y tocá esta tele. Mientras esta app esté abierta, la tele aparece sola.',
+        `Si no aparece, en el celu escribí la IP de esta tele: ${RECV[0]}`,
+      ], [{ label: 'Entendido' }]));
+      $('.actions').insertBefore(b, $('#toggle-news'));
+    }
     document.addEventListener('keydown', (e) => {
       const t = e.target;
       if (e.key.startsWith('Arrow')) {
@@ -1010,12 +1068,20 @@
   }
 
   // PWA: instalable desde el navegador (celular / compu). Sin tiendas.
+  function setupPhoneApp() {
+    if (!PHONE_APP) return;
+    const b = $('#tv-btn');
+    if (b) { b.href = '/remote'; b.replaceChildren(el('span', { 'aria-hidden': 'true', text: '📺' }), ' Mandar a la tele'); }
+    const l = $('#tv-link');
+    if (l) { l.href = '/remote'; l.textContent = '📺 Mandar a la tele'; }
+  }
+
   function setupPwa() {
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
     const btn = $('#install');
-    if (!btn || TV) return;
+    if (!btn || TV || PHONE_APP) return;
     let deferred = null;
     // Solo en el celular: en la compu "instalar" crea un acceso en el escritorio y confunde
     // (la gente lo toma por la app de la tele, que está en /tv).
@@ -1038,6 +1104,7 @@
   async function init() {
     readState();
     setupTv();
+    setupPhoneApp();
     setupPwa();
     keepAwake();
     tickClock();

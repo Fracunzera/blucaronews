@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- App de Android TV de Blucaro News: una ventana (WebView) a la página en modo TV.
-     Solo pide Internet. Aparece en el inicio de Android TV / Google TV (LEANBACK_LAUNCHER)
-     y también se puede instalar en un celular o tablet Android. -->
+<!-- Blucaro News. En la tele: la página en modo TV (WebView) y "recibir del celu".
+     En el celu: control remoto que arma la grilla en una pantalla invisible y la manda a
+     la tele como un solo video por el Wi-Fi de la casa (nada pasa por internet). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="site.blucaro.news">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Celu -> tele por el Wi-Fi: buscar la tele (mDNS) y mantener el Wi-Fi activo. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Transmitir en segundo plano (notificación "Transmitiendo a la tele"). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Solo para llevar el SONIDO de los canales a la tele (captura de audio interno). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
@@ -15,13 +29,12 @@
         android:banner="@drawable/banner"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
         android:allowBackup="false"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -29,5 +42,15 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".RemoteActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
+        <service
+            android:name=".cast.CastService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|mediaPlayback" />
     </application>
 </manifest>
