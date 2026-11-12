@@ -6,7 +6,8 @@
 (() => {
   const $ = (sel, el = document) => el.querySelector(sel);
   const STORE_KEY = 'bn.layout.v1';
-  const MOBILE = window.matchMedia('(max-width: 820px)');
+  // Celu: angosto, o táctil y bajito (un celu acostado pasa los 820 px de ancho).
+  const MOBILE = window.matchMedia('(max-width: 820px), (pointer: coarse) and (max-height: 500px)');
   const ART = 'America/Argentina/Buenos_Aires';
   // Modo TV: se activa solo en navegadores de tele / la app de Android TV, o con ?tv=1
   // (?tv=0 lo apaga). Se recuerda en el navegador.
@@ -112,18 +113,31 @@
     const p = new URLSearchParams(location.search);
     const saved = store.get(STORE_KEY, null);
     // App de TV: arranca con 2 canales lado a lado ('d'); 4 es opcional, con aviso.
-    const raw = p.get('g') || (APP_TV ? store.get('bn.tv.g', 'd') : SENDER ? store.get('bn.sender.g', 2) : saved?.g) || (TV ? 1 : 2);
+    // Celu: arranca con 1 canal y deja elegir 1, 2 o 4 (se guarda aparte de la compu).
+    const phone = MOBILE.matches && !TV;
+    const raw = p.get('g') || (APP_TV ? store.get('bn.tv.g', 'd') : SENDER ? store.get('bn.sender.g', 2) : phone ? store.get('bn.mobile.g', 1) : saved?.g) || (TV ? 1 : 2);
     state.g = raw === 'd' ? 'd' : [1, 2, 3].includes(Number(raw)) ? Number(raw) : 2;
-    if (state.g === 'd' && !APP_TV && !SENDER) state.g = 2;
+    if (state.g === 'd' && !APP_TV && !SENDER && !phone) state.g = 2;
     // En la tele, más de 4 reproductores a la vez traban el equipo.
-    if (TV && state.g === 3) state.g = 2;
+    if ((TV || phone) && state.g === 3) state.g = 2;
     const fromUrl = p.get('c');
     state.c = fromUrl != null ? fromUrl.split(',').map((s) => s.trim().slice(0, 40)) : Array.isArray(saved?.c) ? saved.c : [];
   }
 
   // Cantidad de paneles y forma de la grilla ('d' = 2 lado a lado).
-  function panelCount() { return singleColumn() ? 1 : state.g === 'd' ? 2 : state.g * state.g; }
-  function gridShape() { return singleColumn() ? [1, 1] : state.g === 'd' ? [2, 1] : [state.g, state.g]; }
+  const PORTRAIT = window.matchMedia('(orientation: portrait)');
+  function panelCount() { return state.g === 'd' ? 2 : state.g * state.g; }
+  // 2 canales: uno arriba del otro con el celu vertical; lado a lado si no.
+  function gridShape() {
+    if (state.g === 'd') return singleColumn() && PORTRAIT.matches && !document.fullscreenElement ? [1, 2] : [2, 1];
+    return [state.g, state.g];
+  }
+  function applyShape() {
+    const grid = $('#grid');
+    const [cols, rows] = gridShape();
+    grid.style.setProperty('--cols', String(cols));
+    grid.style.setProperty('--rows', String(rows));
+  }
 
   function defaults() {
     // Completa los paneles sin asignar con canales que todavía no estén en la grilla.
@@ -142,6 +156,7 @@
   function persist() {
     if (APP_TV) store.set('bn.tv.g', state.g);
     if (SENDER) store.set('bn.sender.g', state.g);
+    if (singleColumn()) store.set('bn.mobile.g', state.g);
     else store.set(STORE_KEY, { g: state.g, c: state.c.slice(0, 9) });
     if (APP_TV) store.set(STORE_KEY, { ...(store.get(STORE_KEY, {}) || {}), c: state.c.slice(0, 9) });
     try { history.replaceState(null, '', shareUrl()); } catch { /* ignorar */ }
@@ -515,10 +530,9 @@
     panels.length = 0;
     const count = panelCount();
     const stagger = TV && INJECT && tvPerf.codec === 'mixto' && count > 1;
-    const [cols, rows] = gridShape();
-    grid.style.setProperty('--cols', String(cols));
-    grid.style.setProperty('--rows', String(rows));
+    applyShape();
     grid.classList.toggle('dual', state.g === 'd' && !singleColumn());
+    grid.classList.toggle('multi', count > 1);
     grid.replaceChildren();
     for (let i = 0; i < count; i++) {
       const select = channelSelect(i);
@@ -558,7 +572,7 @@
       panels[0].onFirstPlay = go;
       setTimeout(go, 8000);
     }
-    document.querySelectorAll('.seg').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.g === String(state.g))));
+    document.querySelectorAll('.seg[data-g]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.g === String(state.g))));
   }
 
   // ======================================================================
@@ -855,9 +869,20 @@
     ], [{ label: 'Entendido' }]);
   }
 
+  // Botones 1/2/4/9 según el equipo: en el celu 1, 2 y 4; el 2 también en la app de TV.
+  function syncSegs() {
+    const mobile = singleColumn();
+    const two = document.querySelector('.seg[data-g="d"]');
+    const nine = document.querySelector('.seg[data-g="3"]');
+    if (two) two.hidden = !(APP_TV || SENDER || mobile);
+    if (nine) nine.hidden = TV || mobile;
+    const fs = $('#fs-btn');
+    if (fs) fs.hidden = !(mobile && document.fullscreenEnabled);
+  }
+
   function setupLayout() {
     const apply = (g) => { state.g = g; persist(); renderGrid(); if (TV) panels[0]?.body.focus(); };
-    document.querySelectorAll('.seg').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.seg[data-g]').forEach((b) => b.addEventListener('click', () => {
       const g = b.dataset.g === 'd' ? 'd' : Number(b.dataset.g);
       if (APP_TV && g !== 1 && g !== state.g && store.get('bn.tv.onlyOne', false)) {
         warnOnlyOne(g === 'd' ? 2 : 4, () => apply(g));
@@ -866,7 +891,20 @@
       if (APP_TV && g === 2 && state.g !== 2) { warnFour(() => apply(2)); return; }
       apply(g);
     }));
-    MOBILE.addEventListener('change', renderGrid);
+    MOBILE.addEventListener('change', () => { syncSegs(); renderGrid(); });
+    PORTRAIT.addEventListener('change', applyShape);
+    syncSegs();
+    // Celu: pantalla completa para la grilla (y horizontal si el celu deja).
+    const fs = $('#fs-btn');
+    if (fs && document.fullscreenEnabled && !TV) {
+      fs.addEventListener('click', async () => {
+        try {
+          await $('#grid').requestFullscreen({ navigationUI: 'hide' });
+          try { await screen.orientation.lock('landscape'); } catch { /* no todos dejan */ }
+        } catch { /* sin pantalla completa */ }
+      });
+      document.addEventListener('fullscreenchange', applyShape);
+    }
     if (TV) {
       let t = null;
       window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => panels.forEach(applyLite), 300); });

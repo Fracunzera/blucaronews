@@ -252,12 +252,17 @@ body.news-hidden .news { display: none; }
 
 /* ---------- celular: un solo panel con selector ---------- */
 
-@media (max-width: 820px) {
+@media (max-width: 820px), (pointer: coarse) and (max-height: 500px) {
   body { height: auto; min-height: 100dvh; overflow: auto; grid-template-rows: auto auto auto auto; }
   .topbar { padding: 6px 10px; gap: 8px; }
-  .brand-sub, .controls, #toggle-news, .clock { display: none; }
+  .brand-sub, .controls-label, #toggle-news, .clock { display: none; }
   .layout { grid-template-columns: 1fr; }
-  .grid { --g: 1 !important; grid-template-rows: auto; padding: 6px; }
+  .grid { grid-template-rows: auto; padding: 6px; }
+  /* Varios canales en el celu: barras compactas (el selector ocupa la fila). */
+  .grid.multi .panel-bar { flex-wrap: wrap; gap: 4px; padding: 3px; }
+  .grid.multi .panel-bar select { flex: 1 1 100%; max-width: none; min-height: 30px; font-size: 13px; }
+  .grid.multi .status { display: none; }
+  .grid.multi .panel-bar .icon-btn { flex: 1; min-height: 28px; }
   .panel-body { aspect-ratio: 16 / 9; }
   .panel-bar select { max-width: none; }
   .news { border-left: 0; border-top: 1px solid var(--line); max-height: none; }
@@ -374,3 +379,12 @@ html.sender .tv-hint { display: none !important; }
 html.sender .panel.unmuted .tv-hint { display: block !important; }
 html.sender .panel.unmuted .tv-hint::before { content: "🔊"; }
 html.sender .ticker-btn { display: none; }
+
+/* Grilla en pantalla completa (botón ⛶ del celu): los canales llenan la pantalla. */
+#grid:fullscreen {
+  background: #000; padding: 0; gap: 2px; width: 100vw; height: 100vh; align-content: stretch;
+  grid-template-rows: repeat(var(--rows, var(--g)), minmax(0, 1fr)) !important;
+}
+#grid:fullscreen .panel { min-height: 0; }
+#grid:fullscreen .panel-body { aspect-ratio: auto !important; }
+.seg.fs { font-size: 16px; }
